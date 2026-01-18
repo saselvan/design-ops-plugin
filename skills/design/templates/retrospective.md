@@ -148,6 +148,44 @@ How well did our design tokens work in practice?
 
 ---
 
+## Visual Accuracy
+
+How well did our visual targets translate to implementation?
+
+### Token Usage
+
+| Check | Result | Issues |
+|-------|--------|--------|
+| All colors from tokens.md | pass/fail | {any hardcoded colors found} |
+| All spacing on grid | pass/fail | {any off-grid values} |
+| All typography in scale | pass/fail | {any undefined fonts/sizes} |
+
+### Visual Validator Results
+
+| Validator | Pass/Fail | Issues |
+|-----------|-----------|--------|
+| spec-validator | pass/fail | {issues} |
+| visual-validator | pass/fail | {pixel diff %, breakpoint issues} |
+| a11y-validator | pass/fail | {WCAG violations} |
+
+### Figma Drift
+
+Did implementation diverge from Figma source?
+
+| Element | Figma | Implementation | Justified? |
+|---------|-------|----------------|------------|
+| {element} | {figma value} | {actual value} | yes/no — {reason} |
+
+### Visual Validation Gaps
+
+What did visual validation miss that caused issues?
+
+| Gap | Impact | Validator Improvement |
+|-----|--------|----------------------|
+| {what was missed} | {how it hurt us} | {how to catch it next time} |
+
+---
+
 ## Process Observations
 
 ### What Worked Well

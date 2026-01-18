@@ -1,0 +1,99 @@
+{
+  "$schema": "https://zeroshot.dev/schemas/cluster-config.json",
+  "name": "design-implementation",
+  "description": "Multi-agent cluster for implementing UI specs with visual validation",
+  "version": "1.0.0",
+
+  "agents": {
+    "planner": {
+      "model": "sonnet",
+      "system": "You are a planning agent for UI implementation. Break down specs into implementable tasks. Consider visual requirements, accessibility, and responsive design."
+    },
+
+    "worker": {
+      "model": "sonnet",
+      "system": "You are an implementation agent. Write production-quality code following the specs exactly. Use tokens from tokens.md for all visual properties. Never hardcode colors, spacing, or typography."
+    },
+
+    "validators": [
+      {
+        "name": "spec-validator",
+        "model": "haiku",
+        "trigger": "on_task_complete",
+        "prompt": "Verify implementation matches specs/*.md requirements. Check: interface contracts, state machines, error handling, accessibility requirements. Reject if any requirement is not met."
+      },
+
+      {
+        "name": "test-validator",
+        "model": "haiku",
+        "trigger": "on_task_complete",
+        "prompt": "Run tests/*.md acceptance criteria. Execute Given/When/Then scenarios. Reject if any test fails."
+      },
+
+      {
+        "name": "visual-validator",
+        "model": "sonnet",
+        "trigger": "on_task_complete",
+        "tools": ["playwright"],
+        "prompt": "Visual validation for UI implementation:\n\n1. Screenshot rendered component at breakpoints:\n   - Desktop: 1440px\n   - Tablet: 768px\n   - Mobile: 320px\n\n2. Compare against reference screenshots in assets/\n\n3. Validate tokens usage:\n   - Colors match tokens.md (no hardcoded hex values)\n   - Spacing aligns with spacing scale\n   - Typography uses defined font stack\n\n4. Check responsive behavior:\n   - Layout adapts correctly at each breakpoint\n   - No content overflow or clipping\n   - Touch targets >= 44px on mobile\n\nREJECT if:\n- Spacing > 4px off from reference\n- Colors don't match tokens\n- Typography doesn't match scale\n- Layout breaks at any breakpoint\n- Visual regression > 5% pixel difference\n\nPASS if all visual requirements met."
+      },
+
+      {
+        "name": "a11y-validator",
+        "model": "haiku",
+        "trigger": "on_task_complete",
+        "tools": ["playwright"],
+        "prompt": "Run accessibility validation:\n\n1. Execute axe-core on rendered component\n2. Check WCAG 2.1 AA compliance\n3. Verify:\n   - Color contrast >= 4.5:1 for text\n   - Color contrast >= 3:1 for UI components\n   - Focus indicators visible\n   - Keyboard navigation works\n   - ARIA labels present where needed\n\nREJECT if any WCAG AA violation.\nWARN for AAA violations (don't reject)."
+      }
+    ]
+  },
+
+  "workflow": {
+    "on_start": [
+      "Read specs from docs/design/specs/",
+      "Read tokens from docs/design/tokens.md",
+      "Load reference screenshots from docs/design/assets/"
+    ],
+
+    "task_flow": [
+      "planner breaks spec into tasks",
+      "worker implements each task",
+      "spec-validator checks requirements",
+      "test-validator runs acceptance tests",
+      "visual-validator checks visual fidelity",
+      "a11y-validator checks accessibility",
+      "if any validator rejects -> worker fixes -> re-validate",
+      "if all pass -> commit"
+    ],
+
+    "on_complete": [
+      "Generate implementation summary",
+      "List any validation warnings",
+      "Suggest retrospective items"
+    ]
+  },
+
+  "settings": {
+    "max_retries": 3,
+    "validation_timeout": 60000,
+    "screenshot_wait": 2000,
+    "parallel_validation": false
+  },
+
+  "tools_required": [
+    "playwright",
+    "axe-core"
+  ],
+
+  "usage": {
+    "command": "zeroshot run docs/design/implement.md --config design-implementation",
+    "prerequisites": [
+      "npm install -g playwright",
+      "npx playwright install",
+      "Specs in docs/design/specs/",
+      "Tests in docs/design/tests/",
+      "Tokens in docs/design/tokens.md",
+      "Reference screenshots in docs/design/assets/"
+    ]
+  }
+}

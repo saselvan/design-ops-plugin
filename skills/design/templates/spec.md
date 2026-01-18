@@ -85,6 +85,34 @@ stateDiagram-v2
 
 ---
 
+## Visual Reference
+
+### Figma Source (if applicable)
+
+| Field | Value |
+|-------|-------|
+| File URL | {Figma URL or "N/A"} |
+| Frame/Node ID | {node ID or "N/A"} |
+| Last Synced | {date or "N/A"} |
+
+### Reference Screenshots
+
+| Breakpoint | Screenshot | Notes |
+|------------|------------|-------|
+| Desktop (1440px) | ![](../assets/S-{NNN}-desktop.png) | {notes} |
+| Tablet (768px) | ![](../assets/S-{NNN}-tablet.png) | {notes} |
+| Mobile (320px) | ![](../assets/S-{NNN}-mobile.png) | {notes} |
+
+### Visual Acceptance Criteria
+
+- [ ] Layout matches reference at all breakpoints (within 4px)
+- [ ] Colors use tokens from tokens.md (no hardcoded hex)
+- [ ] Typography uses defined font stack
+- [ ] Spacing aligns with spacing scale
+- [ ] Touch targets >= 44px on mobile
+
+---
+
 ## API Shape
 
 ### Endpoints Used

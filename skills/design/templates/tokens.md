@@ -7,6 +7,27 @@ domain: {domain}
 
 ---
 
+## Token Source
+
+### Priority Order
+
+1. **Figma MCP** — Auto-extracted from Figma variables (preferred)
+2. **Domain Library** — Pre-researched tokens from `domains/{domain}.md`
+3. **Manual** — Hand-defined based on research
+
+### Figma Source (if applicable)
+
+| Field | Value |
+|-------|-------|
+| File URL | {Figma URL or "N/A"} |
+| Variables Collection | {collection name or "N/A"} |
+| Last Synced | {date or "N/A"} |
+| Extraction Method | Figma MCP / manual |
+
+> Run `figma-mcp variables --file {file-id}` to auto-extract tokens.
+
+---
+
 ## Domain Context
 
 **Industry**: {from research}

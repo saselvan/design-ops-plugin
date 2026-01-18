@@ -12,7 +12,7 @@ Turn ideas into exhaustive, tested implementations through a research-driven des
 This skill orchestrates a complete design workflow:
 
 ```
-Research → Validation → Constraints → Brainstorm → Journeys → Tokens → Specs → Tests → Implementation
+Research → Validation → Constraints → Brainstorm → Journeys → Tokens → Visual Targets → Specs → Visual Validation → Tests → Implementation
 ```
 
 Each phase has validation gates that catch problems before they propagate downstream.
@@ -27,6 +27,8 @@ Each phase has validation gates that catch problems before they propagate downst
 /design {project} research             # Research phase only
 /design {project} journey              # Journey phase only
 /design {project} spec                 # Spec phase only
+/design {project} visual               # Capture visual targets (screenshots, tokens from Figma)
+/design {project} validate visual      # Run visual validation on implementation
 /design {project} retrospective        # Post-implementation review
 ```
 
@@ -52,7 +54,9 @@ Analyze the request to determine mode:
 | Personas | If needed | ❌ | ❌ |
 | Journeys + Validation | ✅ 2 iterations | ✅ 1 iteration | ❌ |
 | Tokens | ✅ | Reuse existing | Reuse existing |
+| Visual Targets | ✅ | ✅ if UI | ❌ |
 | Specs + Validation | ✅ 2 iterations | ✅ 1 iteration | ✅ no validation |
+| Visual Validation | ✅ | ✅ if UI | ❌ |
 | Tests + Validation | ✅ 2 iterations | ✅ 1 iteration | ✅ no validation |
 | Retrospective | ✅ | ✅ | Optional |
 
@@ -129,15 +133,26 @@ Codify visual design decisions as reusable tokens.
 - Typography, colors, spacing
 - Borders, shadows, motion
 - Component tokens
+- Extract from Figma MCP if available
 
 **Check domain libraries:** `domains/{domain}.md`
 **Read:** `templates/tokens.md` for template.
+
+### Phase 6.5: Visual Targets
+Capture visual references before writing specs.
+- Extract screenshots from Figma (Figma MCP) or existing URLs (Playwright MCP)
+- Capture at breakpoints: Desktop (1440px), Tablet (768px), Mobile (320px)
+- Map Figma variables to design tokens
+- Document visual acceptance criteria
+
+**Run:** `/design {project} visual` to capture targets.
+**Read:** `templates/visual-targets.md` for template.
 
 ### Phase 7: Specs
 Ralph-style exhaustive specifications.
 - Interface contracts
 - State machines
-- Visual specs
+- Visual specs with references
 - Accessibility requirements
 - Performance targets
 - Definition of Done
@@ -152,6 +167,16 @@ Stress test specs before deriving tests.
 - Contradiction detection
 
 **Read:** `templates/spec-validation.md` for validation prompts.
+
+### Phase 7.7: Visual Validation
+Validate visual targets before writing tests.
+- Figma feasibility (can design be implemented with current stack?)
+- Token coverage (all colors, spacing, typography mapped?)
+- Responsive coherence (breakpoint designs make sense together?)
+- Reference capture (screenshots captured for all specs?)
+- Visual testability (can requirements be validated programmatically?)
+
+**Read:** `templates/visual-validation.md` for validation prompts.
 
 ### Phase 8: Tests
 Multi-layer test contracts.
@@ -173,8 +198,23 @@ Stress test the tests themselves.
 
 ### Handoff
 Package specs + tests for implementation.
-- Zeroshot: `zeroshot run --specs ./docs/design/specs --tests ./docs/design/tests`
-- Ralph: `ralph build --spec ./docs/design/specs/S-001-*.md`
+
+**With Zeroshot visual validators:**
+```bash
+zeroshot run docs/design/implement.md --config design-implementation
+```
+
+**Standard Zeroshot:**
+```bash
+zeroshot run --specs ./docs/design/specs --tests ./docs/design/tests
+```
+
+**Ralph:**
+```bash
+ralph build --spec ./docs/design/specs/S-001-*.md
+```
+
+**Read:** `zeroshot/zeroshot-design-cluster.md` for visual validation cluster config.
 
 ### Phase 9: Retrospective
 Capture learnings after implementation.
@@ -182,6 +222,7 @@ Capture learnings after implementation.
 - Journey accuracy
 - Spec accuracy
 - Test accuracy
+- Visual accuracy (token usage, validator results, Figma drift)
 - Learnings to propagate
 
 **Read:** `templates/retrospective.md` for template.
@@ -195,6 +236,8 @@ Capture learnings after implementation.
 ├── constraints.md
 ├── requirements.md
 ├── tokens.md
+├── visual-targets.md
+├── visual-validation.md
 ├── personas/
 │   └── P-001-{name}.md
 ├── journeys/
@@ -206,8 +249,33 @@ Capture learnings after implementation.
 ├── tests/
 │   ├── T-001-{name}.md
 │   └── T-001-validation.md
+├── assets/
+│   ├── S-001-desktop.png
+│   ├── S-001-tablet.png
+│   └── S-001-mobile.png
 └── retrospective.md
 ```
+
+## Zeroshot Visual Validation
+
+For UI-heavy projects, use the visual validation cluster config:
+
+```
+┌─────────┐    ┌─────────┐    ┌───────────────────────────┐
+│ Planner │ →  │ Worker  │ →  │      VALIDATORS           │
+└─────────┘    └─────────┘    │                           │
+                              │  ✓ spec-validator         │
+                              │  ✓ test-validator         │
+                              │  ✓ visual-validator ←──── Playwright
+                              │  ✓ a11y-validator         │
+                              └───────────────────────────┘
+                                       │
+                                  REJECT? → Back to Worker
+                                       │
+                                   ALL OK → Commit
+```
+
+**Read:** `zeroshot/zeroshot-design-cluster.md` for setup and usage.
 
 ## Escape Hatch
 
