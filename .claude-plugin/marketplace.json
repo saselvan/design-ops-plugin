@@ -1,0 +1,20 @@
+{
+  "name": "design-ops-marketplace",
+  "description": "Design Ops plugin marketplace",
+  "owner": {
+    "name": "Samuel Selvan",
+    "email": "samuel.selvan@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "design-ops",
+      "description": "Design Ops Flywheel: Research-driven design system for turning ideas into exhaustive, tested implementations",
+      "version": "1.0.0",
+      "source": "./",
+      "author": {
+        "name": "Samuel Selvan",
+        "email": "samuel.selvan@gmail.com"
+      }
+    }
+  ]
+}
