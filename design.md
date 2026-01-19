@@ -1,7 +1,7 @@
 ---
 name: Design
-description: Enhanced Design Ops workflow with invariant enforcement. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
-version: "1.0"
+description: Enhanced Design Ops workflow with invariant enforcement, multi-agent orchestration, and continuous validation. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation, watch mode.
+version: "2.0"
 ---
 
 # Design Ops Skill
@@ -10,37 +10,88 @@ Enhanced design workflow that transforms human intent into agent-executable PRPs
 
 ## Overview
 
-This skill orchestrates the complete Design Ops workflow:
+Design Ops v2.0 features a multi-agent architecture for comprehensive spec validation and PRP generation:
 
 ```
-Spec (human intent)
-    │
-    ▼
-┌─────────────────────┐
-│  /design validate   │ ← Invariant checker (validator.sh)
-│  Check against:     │
-│  - Universal (1-10) │
-│  - Domain-specific  │
-└─────────────────────┘
-    │
-    │ PASS (0 violations)
-    ▼
-┌─────────────────────┐
-│  /design prp        │ ← PRP generator (spec-to-prp.sh)
-│  - Template select  │
-│  - Context gather   │
-│  - Variable sub     │
-└─────────────────────┘
-    │
-    ▼
-┌─────────────────────┐
-│  Quality Check      │ ← PRP checker (prp-checker.sh)
-│  - Required sections│
-│  - Quality score    │
-└─────────────────────┘
-    │
-    ▼
-Implementation → /design review → Compliance Report
+                         Spec (human intent)
+                                │
+                ┌───────────────┼───────────────┐
+                ▼               ▼               ▼
+        ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+        │spec-analyst │  │  validator  │  │  CONVENTIONS│
+        │             │  │             │  │    check    │
+        │• Complete   │  │• Invariants │  │             │
+        │• Complexity │  │• Domain     │  │• Style      │
+        │• Think level│  │• Confidence │  │• Patterns   │
+        └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+               │                │                │
+               └────────────────┼────────────────┘
+                                │
+                                ▼
+                    ┌─────────────────────┐
+                    │   prp-generator     │ ← Templates + Patterns
+                    │                     │
+                    │ • Structure PRP     │
+                    │ • Validation cmds   │
+                    │ • Thinking level    │
+                    │ • Pattern links     │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     reviewer        │ ← Quality gate
+                    │                     │
+                    │ • Required sections │
+                    │ • No placeholders   │
+                    │ • Executable cmds   │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    ▼                     ▼
+              APPROVED              NEEDS WORK
+                    │                     │
+                    ▼                     └─► Iterate
+              Implementation
+                    │
+                    ▼
+            ┌─────────────────────┐
+            │   retrospective     │ ← Learning loop
+            │                     │
+            │ • Extract learnings │
+            │ • Propose invariants│
+            │ • System improve    │
+            └─────────────────────┘
+```
+
+### Continuous Validation Mode
+
+```
+┌─────────────────┐
+│  watch-mode.sh  │ ← Monitors spec files
+│                 │
+│ • File changes  │
+│ • Real-time     │
+│   confidence    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│continuous-      │ ← Background service
+│validator.sh    │
+│                 │
+│ • Multi-spec    │
+│ • Webhooks      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│validation-      │ ← Terminal dashboard
+│dashboard.sh    │
+│                 │
+│ • Health status │
+│ • Trends        │
+│ • Alerts        │
+└─────────────────┘
 ```
 
 ## Agent
@@ -354,6 +405,350 @@ Status: NEEDS ATTENTION
 
 ---
 
+### /design orchestrate {spec-file} [--domain domain] [--phase phase]
+
+Run the multi-agent orchestration pipeline for complete spec-to-PRP workflow.
+
+**Usage:**
+```
+/design orchestrate specs/feature-spec.md --domain api
+/design orchestrate specs/migration-spec.md --phase analysis
+/design orchestrate specs/api-spec.md --domain integration --output ./output
+```
+
+**Phases:**
+- `analysis` - Run spec-analyst and validator in parallel
+- `generate` - Generate PRP from analysis results
+- `review` - Review existing PRP for quality
+- `retrospective` - Create retrospective from completed PRP
+- `full` - Run complete pipeline (default)
+
+**Execution:**
+```bash
+./tools/multi-agent-orchestrator.sh --spec "{spec-file}" --domain "{domain}" [--phase "{phase}"]
+```
+
+**Output:**
+```
+╔═══════════════════════════════════════════════════════════════╗
+║      MULTI-AGENT DESIGN OPS ORCHESTRATOR                      ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Phase: full
+Domain: api
+Output: ./output
+
+━━━ Phase 1: Analysis ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[10:23:45] Starting parallel analysis...
+[10:23:47] ✓ spec-analyst completed
+[10:23:48] ✓ validator completed
+
+Analysis results: Completeness=85%, Thinking=Think
+Validation results: Confidence=78%, Violations=0
+
+━━━ Phase 2: Generation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[10:23:50] ✓ prp-generator completed
+
+━━━ Phase 3: Review ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[10:23:52] ✓ reviewer completed
+
+╔═══════════════════════════════════════════════════════════════╗
+║                      ORCHESTRATION COMPLETE                   ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Generated Files:
+  - analysis.json
+  - validation.json
+  - prp-feature.md
+  - review.json
+
+Status: PRP APPROVED - Ready for implementation
+```
+
+---
+
+### /design watch {spec-file} [--domain domain] [--interval seconds]
+
+Monitor spec file for changes with real-time validation feedback.
+
+**Usage:**
+```
+/design watch specs/feature-spec.md --domain api
+/design watch specs/api-spec.md --interval 5
+```
+
+**Execution:**
+```bash
+./tools/watch-mode.sh --spec "{spec-file}" --domain "{domain}" [--interval "{seconds}"]
+```
+
+**Output:**
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                    WATCH MODE - LIVE VALIDATION               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+Watching: specs/feature-spec.md
+Domain:   api
+Interval: 2s
+
+Press Ctrl+C to stop
+
+[10:25:32] Confidence: 78% ─ | Major: 1 Warnings: 2 (updated)
+[10:25:34] Watching... (no changes)
+[10:25:38] Confidence: 82% ↑ | Warnings: 1 (updated)
+✓ Confidence improved by 4%
+```
+
+---
+
+### /design dashboard [--results-dir dir]
+
+Display real-time validation dashboard showing all spec health status.
+
+**Usage:**
+```
+/design dashboard
+/design dashboard --refresh 10
+```
+
+**Execution:**
+```bash
+./tools/validation-dashboard.sh [--results-dir "{dir}"] [--refresh "{seconds}"]
+```
+
+**Output:**
+```
+╔═══════════════════════════════════════════════════════════════╗
+║           DESIGN OPS VALIDATION DASHBOARD                     ║
+╚═══════════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════════╗
+║ SYSTEM HEALTH                                                 ║
+╠═══════════════════════════════════════════════════════════════╣
+║ Status: HEALTHY                                               ║
+║ Specs Monitored: 5                                            ║
+║ Average Confidence: 76%                                       ║
+║                                                               ║
+║   ████████████████░░░░░░░░                                    ║
+║   ■ Healthy: 4  ■ Warning: 1  ■ Critical: 0                   ║
+╚═══════════════════════════════════════════════════════════════╝
+
+╔═══════════════════════════════════════════════════════════════╗
+║ SPEC VALIDATION STATUS                                        ║
+╠═══════════════════════════════════════════════════════════════╣
+║   SPEC                   CONFIDENCE           CRIT  MAJOR     ║
+║   ──────────────────────────────────────────────────────────  ║
+║   ● api-spec             ████████████████░░░░  82%    0     0 ║
+║   ● user-feature         ████████████████░░░░  78%    0     1 ║
+║   ● migration            ████████████░░░░░░░░  65%    0     2 ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### /design continuous start|stop|status [--spec files]
+
+Manage background continuous validation service.
+
+**Usage:**
+```
+/design continuous start --spec specs/api.md --spec specs/db.md --domain api
+/design continuous status
+/design continuous stop
+```
+
+**Execution:**
+```bash
+./tools/continuous-validator.sh start --spec "{file1}" --spec "{file2}" --domain "{domain}"
+./tools/continuous-validator.sh status
+./tools/continuous-validator.sh stop
+```
+
+---
+
+### /design retrospective {prp-file} --outcome "{summary}"
+
+Generate retrospective and extract learnings after implementation.
+
+**Usage:**
+```
+/design retrospective PRPs/feature-prp.md --outcome "Successfully deployed, minor issues with error handling"
+```
+
+**Execution:**
+```bash
+./agents/retrospective.sh "{prp-file}" --outcome "{summary}" --domain "{domain}"
+```
+
+**Output:**
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  RETROSPECTIVE - Learning Extraction & System Improvement     ║
+╚═══════════════════════════════════════════════════════════════╝
+
+PRP:     PRPs/feature-prp.md
+Domain:  api
+Outcome: Successfully deployed, minor issues with error handling
+
+[1/4] Analyzing implementation...
+  Completion: 45/48 tasks (94%)
+
+[2/4] Generating retrospective...
+
+[3/4] Identifying invariant proposals...
+  Generated 2 invariant proposals
+
+[4/4] Generating output files...
+  Created: retrospective-feature.md
+  Created: invariant-proposals.json
+
+Generated Files:
+  Retrospective: retrospective-feature.md
+  Proposals:     invariant-proposals.json
+
+Summary:
+  Project:       Feature Implementation
+  Completion:    94%
+  Proposals:     2
+
+Next steps:
+  1. Review and complete the retrospective answers
+  2. Finalize invariant proposals
+  3. Run: ./tools/spec-delta-to-invariant.sh retrospective-feature.md
+```
+
+---
+
+### /design freshness [quick|full]
+
+Run the Design Ops freshness check to ensure methodology stays current with agentic engineering best practices.
+
+**Usage:**
+```
+/design freshness quick   # Check known sources only (5-10 min)
+/design freshness full    # Full landscape research (15-30 min)
+/design freshness         # Defaults to quick
+```
+
+**What It Does:**
+
+1. **Scans Current State** - Inventories all Design Ops files
+2. **Checks Source Health** - Validates registry sources are still active
+3. **Researches Landscape** - Discovers new developments since last scan
+4. **Validates Findings** - Scores against Anthropic-anchored criteria
+5. **Analyzes Impact** - Compares findings to current Design Ops
+6. **Generates Actions** - Creates prioritized update plan
+
+**Execution (Claude Code does this inline):**
+
+**Step 1: Gather Context**
+```
+Read and summarize current Design Ops state:
+- templates/ (what PRP templates exist)
+- tools/ (what automation exists)
+- examples/ (what patterns are documented)
+- docs/ (what guidance exists)
+- invariants/ (what domains are covered)
+```
+
+**Step 2: Research Landscape**
+```
+Research agentic engineering developments from [LAST_SCAN_DATE] to today.
+
+REQUIRED SOURCES (always check):
+- Anthropic official: docs.anthropic.com, anthropic.com/research
+- Anthropic Cookbook: github.com/anthropics/anthropic-cookbook
+- Claude Code docs: Current best practices
+- MCP updates: modelcontextprotocol.io
+
+DISCOVERY FOCUS:
+- New methodologies with >1000 GitHub stars OR enterprise adoption
+- Patterns validated by Anthropic or recognized experts
+- Tools/approaches compatible with invariant-based validation
+
+CONTEXT: Design Ops uses invariant-based validation, multi-agent orchestration,
+confidence scoring, and PRP-based implementation planning. Assess compatibility.
+
+For each finding provide:
+- Source URL
+- Validation evidence (who endorses, adoption metrics)
+- Key innovation (what's new)
+- Relevance to Design Ops (1-10)
+- Recommended action (adopt/watch/ignore)
+```
+
+**Step 3: Validate Against Framework**
+```
+For each discovered source, score against:
+1. Anthropic Alignment (0-3): Is it endorsed/compatible with Anthropic guidance?
+2. Traction (0-3): GitHub stars >1000? Enterprise adoption? Case studies?
+3. Design Ops Fit (0-3): Compatible with invariants, PRPs, confidence scoring?
+4. Freshness (0-1): Updated in last 6 months?
+
+Total score /10. Only sources scoring ≥6 get recommended.
+```
+
+**Step 4: Generate Impact Analysis**
+```
+Compare findings against current Design Ops:
+
+VALIDATED (Design Ops already does this):
+- [List what's confirmed as best practice]
+
+NEEDS UPDATE (Design Ops should change):
+- [List specific files and changes needed]
+
+DEPRECATED (Design Ops should remove/update):
+- [List anything now outdated]
+
+NEW ADDITIONS (Design Ops should add):
+- [List new patterns/tools to incorporate]
+```
+
+**Step 5: Create Action Plan**
+```
+Write to docs/freshness/actions/YYYY-MM-actions.md:
+
+## Quick Wins (< 1 hour)
+- [ ] Action 1: File, change, reason
+
+## Short-term (1 day)
+- [ ] Action 2: File, change, reason
+
+## Medium-term (1 week)
+- [ ] Action 3: File, change, reason
+
+## Watch List (revisit next month)
+- Source X: Why watching, trigger for action
+```
+
+**Step 6: Update Dashboard**
+```
+Write to docs/freshness/dashboard.md:
+- Last scan date
+- Health score (0-100)
+- Sources monitored
+- Pending actions count
+- Design Ops version alignment
+```
+
+**Output Files:**
+```
+docs/freshness/
+├── discoveries/YYYY-MM-raw.md       # Raw research findings
+├── validated/YYYY-MM-validated.md   # Scored and filtered
+├── impact/YYYY-MM-impact.md         # Gap analysis
+├── actions/YYYY-MM-actions.md       # Prioritized todo list
+├── reports/YYYY-MM-summary.md       # Executive summary
+└── dashboard.md                     # Current state (always updated)
+```
+
+**Automated Monthly Reminder:**
+Install with `./tools/freshness/install.sh` to get MacOS notification on 1st of each month.
+
+---
+
 ### /design report {project-name}
 
 Generate a comprehensive project status report.
@@ -549,13 +944,34 @@ When executing commands, resolve the DesignOps root directory as:
 
 ### Required Scripts
 
-Located at `{DESIGNOPS_ROOT}/enforcement/`:
+**Located at `{DESIGNOPS_ROOT}/enforcement/`:**
 
 | Script | Purpose | Direct Use |
 |--------|---------|------------|
-| `validator.sh` | Invariant checking | `./validator.sh <spec> [--domain <file>]` |
-| `spec-to-prp.sh` | PRP generation | `./spec-to-prp.sh <spec> [--template <type>]` |
+| `validator.sh` | Invariant checking + CONVENTIONS | `./validator.sh <spec> [--domain <file>]` |
+| `spec-to-prp.sh` | PRP generation + patterns | `./spec-to-prp.sh <spec> [--template <type>]` |
 | `prp-checker.sh` | PRP quality check | `./prp-checker.sh <prp> [--verbose]` |
+| `confidence-calculator.sh` | Calculate confidence score | `./confidence-calculator.sh <prp>` |
+
+**Located at `{DESIGNOPS_ROOT}/agents/`:**
+
+| Script | Purpose | Direct Use |
+|--------|---------|------------|
+| `spec-analyst.sh` | Analyze spec completeness | `./spec-analyst.sh <spec> --domain <domain>` |
+| `validator.sh` | Domain invariant validation | `./validator.sh <spec> --domain <domain>` |
+| `prp-generator.sh` | Generate PRP from analysis | `./prp-generator.sh <spec> --analysis <file> --validation <file>` |
+| `reviewer.sh` | Review PRP quality | `./reviewer.sh <prp>` |
+| `retrospective.sh` | Extract learnings | `./retrospective.sh <prp> --outcome "<summary>"` |
+
+**Located at `{DESIGNOPS_ROOT}/tools/`:**
+
+| Script | Purpose | Direct Use |
+|--------|---------|------------|
+| `multi-agent-orchestrator.sh` | Full pipeline coordination | `./multi-agent-orchestrator.sh --spec <file> --domain <domain>` |
+| `watch-mode.sh` | Real-time spec monitoring | `./watch-mode.sh --spec <file> --domain <domain>` |
+| `continuous-validator.sh` | Background validation service | `./continuous-validator.sh start|stop|status` |
+| `validation-dashboard.sh` | Terminal dashboard | `./validation-dashboard.sh` |
+| `spec-delta-to-invariant.sh` | Extract invariants from retrospectives | `./spec-delta-to-invariant.sh <retro>` |
 
 ### Required Files
 
@@ -563,7 +979,33 @@ Located at `{DESIGNOPS_ROOT}/enforcement/`:
 |------|----------|---------|
 | `system-invariants.md` | `{DESIGNOPS_ROOT}/` | Core invariant definitions |
 | `prp-base.md` | `{DESIGNOPS_ROOT}/templates/` | Base PRP template |
+| `thinking-level-rubric.md` | `{DESIGNOPS_ROOT}/templates/` | Thinking level quick reference |
+| `validation-commands-library.md` | `{DESIGNOPS_ROOT}/templates/` | Reusable validation commands |
+| `retrospective-template.md` | `{DESIGNOPS_ROOT}/templates/` | Post-implementation retro template |
 | Domain files | `{DESIGNOPS_ROOT}/domains/` | Domain-specific invariants |
+
+### Pattern Examples
+
+| Pattern | Location | Use Case |
+|---------|----------|----------|
+| `api-client.md` | `{DESIGNOPS_ROOT}/examples/` | API integration, HTTP clients, retries |
+| `error-handling.md` | `{DESIGNOPS_ROOT}/examples/` | Error hierarchy, Result types, circuit breakers |
+| `database-patterns.md` | `{DESIGNOPS_ROOT}/examples/` | Repository pattern, transactions, pooling |
+| `config-loading.md` | `{DESIGNOPS_ROOT}/examples/` | Env vars, validation, secrets |
+| `test-fixtures.md` | `{DESIGNOPS_ROOT}/examples/` | Factories, mocks, test isolation |
+
+### Documentation
+
+| Doc | Location | Purpose |
+|-----|----------|---------|
+| `multi-agent-architecture.md` | `{DESIGNOPS_ROOT}/docs/` | Agent coordination design |
+| `thinking-levels.md` | `{DESIGNOPS_ROOT}/docs/` | When to use Think/Think Hard/Ultrathink |
+
+### Configuration
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `watch-config.yaml` | `{DESIGNOPS_ROOT}/config/` | Watch mode and agent configuration |
 
 ### Available Domains
 
@@ -682,6 +1124,7 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.0 | 2026-01-19 | Multi-agent architecture, continuous validation, examples library, thinking levels |
 | 1.0 | 2026-01-19 | Initial release with validate, prp, review, report commands |
 
 ---
@@ -695,9 +1138,16 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 | `/design prp {spec}` | Generate PRP | Compiled PRP + quality score |
 | `/design review {spec} {impl}` | Check compliance | Coverage report |
 | `/design report {project}` | Status overview | Metrics + recommendations |
+| `/design orchestrate {spec}` | Full pipeline | Analysis → PRP → Review |
+| `/design watch {spec}` | Live monitoring | Real-time confidence |
+| `/design dashboard` | System health | All specs status |
+| `/design continuous start` | Background service | Continuous validation |
+| `/design retrospective {prp}` | Extract learnings | Retro + invariant proposals |
 
 ---
 
-*Skill version: 1.0*
+*Skill version: 2.0*
 *Last updated: 2026-01-19*
-*Enforcement tools: validator.sh v1.0, spec-to-prp.sh v1.0, prp-checker.sh v1.0*
+*Enforcement tools: validator.sh v1.1, spec-to-prp.sh v1.1, prp-checker.sh v1.0*
+*Multi-agent system: spec-analyst, validator, prp-generator, reviewer, retrospective*
+*Continuous validation: watch-mode, continuous-validator, validation-dashboard*

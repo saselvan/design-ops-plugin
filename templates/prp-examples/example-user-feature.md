@@ -363,7 +363,89 @@ IF user_complaints_spike:
 
 ---
 
-## 8. State Transitions
+## 8. Validation Commands
+
+Run these commands to verify the Dark Mode implementation:
+
+### 8.1 Test Verification
+
+```bash
+# iOS unit tests
+xcodebuild test -scheme "App" -destination "platform=iOS Simulator,name=iPhone 15" \
+  -only-testing "AppTests/ThemeTests"
+
+# Android unit tests
+./gradlew testDebugUnitTest --tests "*Theme*"
+
+# Shared UI component tests
+npm test -- --testPathPattern="theme|dark-mode"
+```
+
+### 8.2 Code Quality
+
+```bash
+# iOS - SwiftLint
+swiftlint lint --path Sources/Theme/
+
+# Android - ktlint
+./gradlew ktlintCheck
+
+# Accessibility contrast check
+npx @axe-core/cli --include ".dark-mode" http://localhost:3000
+```
+
+### 8.3 Integration Checks
+
+```bash
+# Verify theme toggle persists
+curl -s http://localhost:3000/api/user/preferences | jq '.theme'
+
+# Check all 47 screens render without errors
+npm run test:visual -- --theme=dark
+
+# Verify system preference detection
+npm run test:e2e -- --grep "system theme"
+```
+
+### 8.4 Build Verification
+
+```bash
+# iOS build
+xcodebuild -scheme "App" -configuration Release -destination "generic/platform=iOS"
+
+# Android build
+./gradlew assembleRelease
+
+# Verify dark mode assets included
+unzip -l app/build/outputs/apk/release/app-release.apk | grep "dark"
+```
+
+---
+
+## 9. Recommended Thinking Level
+
+### Assessment
+
+| Factor | Value | Impact |
+|--------|-------|--------|
+| Confidence Score | 8.2/10 | Normal processing |
+| Domains Involved | 1 (consumer) | Normal |
+| Invariants Applied | 15 | Normal to Think |
+| Files Affected | ~47 screens | Think for coverage |
+| Pattern Availability | Good (Material/iOS patterns) | Normal |
+
+### Recommendation
+
+**Overall Level**: Think
+
+**Apply higher thinking to**:
+- Contrast ratio edge cases on complex components
+- Transition animation performance on low-end devices
+- Emotional mapping verification in user testing
+
+---
+
+## 10. State Transitions
 
 ```
 PROJECT_STATE:
@@ -387,7 +469,7 @@ PROJECT_STATE:
 
 ---
 
-## 9. Execution Log
+## 11. Execution Log
 
 ### Phase Completion
 

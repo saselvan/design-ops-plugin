@@ -320,7 +320,82 @@ IF rollout_metrics_degraded:
 
 ---
 
-## 8. State Transitions
+## 8. Validation Commands
+
+Run these commands to verify the Stripe integration implementation:
+
+### 8.1 Test Verification
+
+```bash
+# Run unit tests with coverage
+npm test -- --coverage --testPathPattern="payments"
+
+# Run integration tests against Stripe test mode
+npm run test:integration -- --grep "stripe"
+
+# Run contract tests
+npm run test:contract -- stripe
+```
+
+### 8.2 Code Quality
+
+```bash
+# Type checking
+npx tsc --noEmit --project tsconfig.json
+
+# Linting
+npx eslint src/payments/ --ext .ts,.tsx
+```
+
+### 8.3 Integration Checks
+
+```bash
+# Stripe API connectivity (test mode)
+curl -s -u "$STRIPE_TEST_KEY:" https://api.stripe.com/v1/balance | jq '.available'
+
+# Payment service health check
+curl -sf http://localhost:8080/health/payments && echo "HEALTHY"
+
+# Webhook endpoint accessible
+curl -X POST http://localhost:8080/webhooks/stripe -d '{}' -w "%{http_code}"
+```
+
+### 8.4 Build Verification
+
+```bash
+# Build the payment service
+npm run build
+
+# Verify payment module in build output
+test -f dist/payments/stripe-client.js && echo "BUILD OK"
+```
+
+---
+
+## 9. Recommended Thinking Level
+
+### Assessment
+
+| Factor | Value | Impact |
+|--------|-------|--------|
+| Confidence Score | 7.5/10 | Normal processing |
+| Domains Involved | 2 (universal + integration) | Think for contracts |
+| Invariants Applied | 20 | Think for edge cases |
+| Files Affected | ~12 | Think for coordination |
+| Pattern Availability | Strong (existing payment patterns) | Normal |
+
+### Recommendation
+
+**Overall Level**: Think
+
+**Apply higher thinking to**:
+- Webhook idempotency design
+- Circuit breaker thresholds
+- Rollback procedure validation
+
+---
+
+## 10. State Transitions
 
 ```
 PROJECT_STATE:
@@ -344,7 +419,7 @@ PROJECT_STATE:
 
 ---
 
-## 9. Execution Log
+## 11. Execution Log
 
 ### Phase Completion
 

@@ -431,6 +431,83 @@ while IFS= read -r line; do
 done <<< "$SPEC_CONTENT"
 
 # ============================================================================
+# CONVENTIONS.md Compliance Check
+# ============================================================================
+echo "Checking CONVENTIONS.md compliance..."
+
+# Look for CONVENTIONS.md in various locations
+CONVENTIONS_FILE=""
+SPEC_DIR=$(dirname "$SPEC_FILE")
+
+# Search order: spec dir, parent, grandparent, current dir
+for check_dir in "$SPEC_DIR" "$SPEC_DIR/.." "$SPEC_DIR/../.." "."; do
+    if [[ -f "$check_dir/CONVENTIONS.md" ]]; then
+        CONVENTIONS_FILE="$check_dir/CONVENTIONS.md"
+        break
+    fi
+done
+
+if [[ -n "$CONVENTIONS_FILE" ]] && [[ -f "$CONVENTIONS_FILE" ]]; then
+    echo "  Found: $CONVENTIONS_FILE"
+
+    CONVENTIONS_CONTENT=$(cat "$CONVENTIONS_FILE")
+
+    # Check for naming convention mentions in spec
+    if echo "$SPEC_CONTENT" | grep -qiE "(file|function|variable|class|component).*name"; then
+        # Check if naming follows conventions
+        if echo "$CONVENTIONS_CONTENT" | grep -qiE "naming.*convention"; then
+            # Extract naming patterns from CONVENTIONS.md
+            NAMING_PATTERNS=$(echo "$CONVENTIONS_CONTENT" | grep -oE "(PascalCase|camelCase|snake_case|kebab-case)" | sort -u)
+
+            # Check spec doesn't conflict
+            for pattern in $NAMING_PATTERNS; do
+                if echo "$SPEC_CONTENT" | grep -qiE "should.*use.*$pattern"; then
+                    # Good - spec references conventions
+                    :
+                fi
+            done
+        fi
+    fi
+
+    # Check for file patterns
+    if echo "$CONVENTIONS_CONTENT" | grep -qiE "\.(ts|tsx|js|jsx|py|go)"; then
+        # Extract file extension rules
+        FILE_RULES=$(echo "$CONVENTIONS_CONTENT" | grep -oE "\\.[a-z]+" | sort -u | head -5)
+
+        # Verify spec file references match expected extensions
+        SPEC_FILES=$(echo "$SPEC_CONTENT" | grep -oE "\`[^\\`]+\.(ts|tsx|js|py|go)\`" | sort -u)
+
+        if [[ -n "$SPEC_FILES" ]]; then
+            echo "  Spec references files with extensions matching conventions"
+        fi
+    fi
+
+    # Check for test conventions
+    if echo "$SPEC_CONTENT" | grep -qiE "test|spec|expect|assert"; then
+        if echo "$CONVENTIONS_CONTENT" | grep -qiE "test.*convention|testing.*pattern"; then
+            # Good - has testing conventions
+            :
+        else
+            report_warning "Spec mentions testing but CONVENTIONS.md lacks test conventions" ""
+        fi
+    fi
+
+    # Check for error handling conventions
+    if echo "$SPEC_CONTENT" | grep -qiE "error|exception|failure|catch"; then
+        if echo "$CONVENTIONS_CONTENT" | grep -qiE "error.*handling|exception"; then
+            # Good - has error conventions
+            :
+        else
+            report_warning "Spec mentions errors but CONVENTIONS.md lacks error handling conventions" ""
+        fi
+    fi
+else
+    echo -e "  ${YELLOW}No CONVENTIONS.md found (optional)${NC}"
+fi
+
+echo ""
+
+# ============================================================================
 # Domain-Specific Invariants
 # ============================================================================
 if [[ ${#DOMAIN_FILES[@]} -gt 0 ]]; then

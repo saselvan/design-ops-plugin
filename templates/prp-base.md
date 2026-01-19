@@ -121,6 +121,25 @@ INVARIANT CHECK: No ambiguous terms (Invariant #1).
 | {{ROLE_1}} | {{NAME_1}} | {{RESPONSIBILITY_1}} |
 | {{ROLE_2}} | {{NAME_2}} | {{RESPONSIBILITY_2}} |
 
+### 1.5 Relevant Patterns
+
+<!--
+PURPOSE: Reference applicable patterns from the examples library.
+REFERENCE: See examples/ directory for full pattern documentation.
+-->
+
+| Pattern | Application | Customization Needed |
+|---------|-------------|---------------------|
+| {{PATTERN_1}} | {{PATTERN_APPLICATION_1}} | {{PATTERN_CUSTOMIZATION_1}} |
+| {{PATTERN_2}} | {{PATTERN_APPLICATION_2}} | {{PATTERN_CUSTOMIZATION_2}} |
+
+**Pattern Links:**
+- [API Client](examples/api-client.md) - If integrating with external APIs
+- [Error Handling](examples/error-handling.md) - For error boundaries and recovery
+- [Test Fixtures](examples/test-fixtures.md) - For test data setup
+- [Config Loading](examples/config-loading.md) - For configuration management
+- [Database Patterns](examples/database-patterns.md) - For data access layer
+
 ---
 
 ## 2. Success Criteria
@@ -384,7 +403,89 @@ COMPILES FROM: Dependencies, resources, validation status.
 
 ---
 
-## 8. State Transitions
+## 8. Validation Commands
+
+<!--
+PURPOSE: Concrete, copy-pasteable commands to verify implementation.
+COMPILES FROM: Test strategy, integration points, acceptance criteria.
+REFERENCE: See templates/validation-commands-library.md for more patterns.
+
+Every PRP must include 3-5 specific bash commands that verify:
+1. Tests pass (unit/integration)
+2. Code quality (linting/types)
+3. Integration works (API/service health)
+4. Data integrity (if applicable)
+5. Build succeeds (compilation/packaging)
+-->
+
+### 8.1 Test Verification
+
+```bash
+# Run unit tests with coverage
+{{VALIDATION_TEST_COMMAND}}
+
+# Run integration tests
+{{VALIDATION_INTEGRATION_COMMAND}}
+```
+
+### 8.2 Code Quality
+
+```bash
+# Type checking
+{{VALIDATION_TYPECHECK_COMMAND}}
+
+# Linting
+{{VALIDATION_LINT_COMMAND}}
+```
+
+### 8.3 Integration Checks
+
+```bash
+# API/Service health check
+{{VALIDATION_HEALTH_COMMAND}}
+
+# Verify expected output
+{{VALIDATION_OUTPUT_COMMAND}}
+```
+
+### 8.4 Build Verification
+
+```bash
+# Build the project
+{{VALIDATION_BUILD_COMMAND}}
+```
+
+---
+
+## 9. Recommended Thinking Level
+
+<!--
+PURPOSE: Guide cognitive depth for implementation and review.
+COMPILES FROM: Confidence score, domain complexity, file impact.
+REFERENCE: See docs/thinking-levels.md for detailed guidance.
+-->
+
+### Assessment
+
+| Factor | Value | Impact |
+|--------|-------|--------|
+| Confidence Score | {{CONFIDENCE_SCORE}} | {{THINKING_CONFIDENCE_IMPACT}} |
+| Domains Involved | {{DOMAIN_COUNT}} | {{THINKING_DOMAIN_IMPACT}} |
+| Invariants Applied | {{INVARIANT_COUNT}} | {{THINKING_INVARIANT_IMPACT}} |
+| Files Affected | {{FILE_COUNT}} | {{THINKING_FILE_IMPACT}} |
+| Pattern Availability | {{PATTERN_AVAILABILITY}} | {{THINKING_PATTERN_IMPACT}} |
+
+### Recommendation
+
+**Overall Level**: {{THINKING_LEVEL}}
+
+**Apply higher thinking to**:
+- {{THINKING_FOCUS_1}}
+- {{THINKING_FOCUS_2}}
+
+---
+
+## 10. State Transitions
 
 <!--
 PURPOSE: Explicit state machine for project status.
@@ -413,7 +514,7 @@ PROJECT_STATE:
 
 ---
 
-## 9. Execution Log
+## 11. Execution Log
 
 <!--
 PURPOSE: Track actual execution against plan.
@@ -493,7 +594,35 @@ All `{{VARIABLE}}` placeholders must be replaced before execution.
 | `CONFIDENCE_MITIGATION_*` | string | no | Current mitigations for risks |
 | `CONFIDENCE_RESIDUAL_*` | string | no | Remaining risk after mitigation |
 
+### Validation Command Variables
+
+| Variable | Type | Required | Description |
+|----------|------|----------|-------------|
+| `VALIDATION_TEST_COMMAND` | string | yes | Command to run unit tests |
+| `VALIDATION_INTEGRATION_COMMAND` | string | no | Command to run integration tests |
+| `VALIDATION_TYPECHECK_COMMAND` | string | yes | Command for type checking |
+| `VALIDATION_LINT_COMMAND` | string | yes | Command for linting |
+| `VALIDATION_HEALTH_COMMAND` | string | no | API/service health check |
+| `VALIDATION_OUTPUT_COMMAND` | string | no | Verify expected outputs |
+| `VALIDATION_BUILD_COMMAND` | string | yes | Build/compile command |
+
+### Thinking Level Variables
+
+| Variable | Type | Required | Description |
+|----------|------|----------|-------------|
+| `THINKING_LEVEL` | enum | yes | Normal, Think, Think Hard, or Ultrathink |
+| `THINKING_CONFIDENCE_IMPACT` | string | yes | How confidence affects thinking |
+| `THINKING_DOMAIN_IMPACT` | string | yes | How domain complexity affects thinking |
+| `THINKING_INVARIANT_IMPACT` | string | yes | How invariant count affects thinking |
+| `THINKING_FILE_IMPACT` | string | yes | How file count affects thinking |
+| `THINKING_PATTERN_IMPACT` | string | yes | How pattern availability affects thinking |
+| `THINKING_FOCUS_*` | string | no | Specific areas needing deeper thought |
+| `DOMAIN_COUNT` | int | yes | Number of domains involved |
+| `INVARIANT_COUNT` | int | yes | Total invariants applicable |
+| `FILE_COUNT` | int | no | Estimated files affected |
+| `PATTERN_AVAILABILITY` | enum | yes | exact, adapt, or none |
+
 ---
 
-*Template version: 1.1*
+*Template version: 2.0*
 *Last updated: 2026-01-19*

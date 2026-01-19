@@ -287,7 +287,62 @@ fi
 echo ""
 
 # ============================================================================
-# SECTION 4: Additional Checks
+# SECTION 4: Validation Commands Check
+# ============================================================================
+
+echo -e "${BLUE}─── Validation Commands ───${NC}"
+
+# Check for validation commands section
+if ! echo "$CONTENT" | grep -qiE "## [0-9]*\.? *Validation Commands"; then
+    echo -e "  ${RED}✗ MISSING REQUIRED:${NC} Validation Commands section"
+    echo -e "     ${CYAN}Fix: Add '## Validation Commands' section with bash commands${NC}"
+    ((ERRORS++))
+    ((SCORE-=10))
+else
+    if [[ "$VERBOSE" == "true" ]]; then
+        echo -e "  ${GREEN}✓${NC} Validation Commands section found"
+    fi
+
+    # Check for actual bash code blocks in validation section
+    VALIDATION_SECTION=$(echo "$CONTENT" | sed -n '/## [0-9]*\.* *Validation Commands/,/^## [0-9]/p')
+    BASH_BLOCKS=$(echo "$VALIDATION_SECTION" | grep -c '```bash' 2>/dev/null || true)
+    BASH_BLOCKS=${BASH_BLOCKS:-0}
+
+    if [[ "$BASH_BLOCKS" -lt 1 ]]; then
+        echo -e "  ${YELLOW}⚠ WARNING:${NC} No bash code blocks in Validation Commands"
+        echo -e "     ${CYAN}Fix: Add actual bash commands, not just descriptions${NC}"
+        ((WARNINGS++))
+        ((SCORE-=5))
+    elif [[ "$BASH_BLOCKS" -lt 3 ]]; then
+        echo -e "  ${YELLOW}⚠ WARNING:${NC} Only $BASH_BLOCKS bash blocks - recommend at least 3"
+        echo -e "     ${CYAN}Fix: Include tests, linting, and integration checks${NC}"
+        ((WARNINGS++))
+        ((SCORE-=3))
+    else
+        if [[ "$VERBOSE" == "true" ]]; then
+            echo -e "  ${GREEN}✓${NC} Validation commands include $BASH_BLOCKS bash blocks"
+        fi
+    fi
+
+    # Check for actual commands (not just placeholders)
+    PLACEHOLDER_CMDS=$(echo "$VALIDATION_SECTION" | grep -c "{{VALIDATION_" 2>/dev/null || true)
+    PLACEHOLDER_CMDS=${PLACEHOLDER_CMDS:-0}
+    if [[ "$PLACEHOLDER_CMDS" -gt 0 ]]; then
+        echo -e "  ${YELLOW}⚠ WARNING:${NC} $PLACEHOLDER_CMDS unfilled validation command placeholders"
+        echo -e "     ${CYAN}Fix: Replace {{VALIDATION_*}} with actual commands${NC}"
+        ((WARNINGS++))
+        ((SCORE-=3))
+    else
+        if [[ "$VERBOSE" == "true" ]]; then
+            echo -e "  ${GREEN}✓${NC} No unfilled validation placeholders"
+        fi
+    fi
+fi
+
+echo ""
+
+# ============================================================================
+# SECTION 5: Additional Checks
 # ============================================================================
 
 echo -e "${BLUE}─── Additional Checks ───${NC}"

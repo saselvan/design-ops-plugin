@@ -329,7 +329,124 @@ if [[ "$INTERACTIVE" == "true" ]]; then
 fi
 
 # ============================================================================
-# Step 6: Add Source Spec Reference
+# Step 6: Identify Relevant Patterns
+# ============================================================================
+
+echo -e "${BLUE}📚 Identifying relevant patterns...${NC}"
+
+EXAMPLES_DIR="$SCRIPT_DIR/../examples"
+RELEVANT_PATTERNS=()
+
+# Check for API patterns
+if echo "$SPEC_CONTENT" | grep -qiE "API|endpoint|REST|GraphQL|fetch|request"; then
+    RELEVANT_PATTERNS+=("api-client.md")
+    echo "   → API Client Pattern"
+fi
+
+# Check for error handling patterns
+if echo "$SPEC_CONTENT" | grep -qiE "error|exception|failure|catch|try|recover"; then
+    RELEVANT_PATTERNS+=("error-handling.md")
+    echo "   → Error Handling Pattern"
+fi
+
+# Check for database patterns
+if echo "$SPEC_CONTENT" | grep -qiE "database|db|postgres|mysql|query|repository|transaction"; then
+    RELEVANT_PATTERNS+=("database-patterns.md")
+    echo "   → Database Patterns"
+fi
+
+# Check for config patterns
+if echo "$SPEC_CONTENT" | grep -qiE "config|environment|secret|credential|setting"; then
+    RELEVANT_PATTERNS+=("config-loading.md")
+    echo "   → Config Loading Pattern"
+fi
+
+# Check for test patterns
+if echo "$SPEC_CONTENT" | grep -qiE "test|fixture|mock|stub|factory|spec"; then
+    RELEVANT_PATTERNS+=("test-fixtures.md")
+    echo "   → Test Fixtures Pattern"
+fi
+
+if [[ ${#RELEVANT_PATTERNS[@]} -eq 0 ]]; then
+    echo "   (No specific patterns matched - check examples/ for available patterns)"
+fi
+
+# Build pattern links for PRP
+PATTERN_LINKS=""
+for pattern in "${RELEVANT_PATTERNS[@]}"; do
+    PATTERN_LINKS+="- [$(echo "$pattern" | sed 's/-/ /g' | sed 's/\.md//' | sed 's/\b\w/\u&/g')](../examples/$pattern)
+"
+done
+
+echo ""
+
+# ============================================================================
+# Step 7: Analyze Thinking Level
+# ============================================================================
+
+echo -e "${BLUE}🧠 Analyzing recommended thinking level...${NC}"
+
+# Count domains involved
+DOMAIN_COUNT=1
+if [[ -n "$DOMAIN" ]]; then
+    DOMAIN_COUNT=$((DOMAIN_COUNT + 1))
+fi
+
+# Estimate invariant count based on domain
+INVARIANT_COUNT=10  # Universal invariants
+case "$DETECTED_DOMAIN" in
+    "consumer")
+        INVARIANT_COUNT=$((INVARIANT_COUNT + 5))
+        ;;
+    "data-architecture")
+        INVARIANT_COUNT=$((INVARIANT_COUNT + 5))
+        ;;
+    "integration")
+        INVARIANT_COUNT=$((INVARIANT_COUNT + 4))
+        ;;
+    "physical-construction")
+        INVARIANT_COUNT=$((INVARIANT_COUNT + 6))
+        ;;
+esac
+
+# Estimate complexity based on spec content
+COMPLEXITY_INDICATORS=0
+if echo "$SPEC_CONTENT" | grep -qiE "security|authentication|authorization"; then
+    COMPLEXITY_INDICATORS=$((COMPLEXITY_INDICATORS + 3))
+fi
+if echo "$SPEC_CONTENT" | grep -qiE "migration|database|data"; then
+    COMPLEXITY_INDICATORS=$((COMPLEXITY_INDICATORS + 2))
+fi
+if echo "$SPEC_CONTENT" | grep -qiE "integration|third.party|external|API"; then
+    COMPLEXITY_INDICATORS=$((COMPLEXITY_INDICATORS + 2))
+fi
+if echo "$SPEC_CONTENT" | grep -qiE "production|critical|financial"; then
+    COMPLEXITY_INDICATORS=$((COMPLEXITY_INDICATORS + 2))
+fi
+
+# Determine thinking level
+THINKING_LEVEL="Normal"
+THINKING_REASON=""
+if [[ $COMPLEXITY_INDICATORS -ge 7 ]]; then
+    THINKING_LEVEL="Ultrathink"
+    THINKING_REASON="High complexity: security/critical systems involved"
+elif [[ $COMPLEXITY_INDICATORS -ge 4 ]]; then
+    THINKING_LEVEL="Think Hard"
+    THINKING_REASON="Moderate-high complexity: multiple integration points or data concerns"
+elif [[ $COMPLEXITY_INDICATORS -ge 2 ]] || [[ $INVARIANT_COUNT -gt 15 ]]; then
+    THINKING_LEVEL="Think"
+    THINKING_REASON="Moderate complexity: multiple domains or validation concerns"
+else
+    THINKING_LEVEL="Normal"
+    THINKING_REASON="Standard complexity: well-understood patterns"
+fi
+
+echo "   Recommended level: $THINKING_LEVEL"
+echo "   Reason: $THINKING_REASON"
+echo ""
+
+# ============================================================================
+# Step 8: Add Source Spec Reference, Patterns, and Thinking Level
 # ============================================================================
 
 # Append reference to source spec
@@ -340,7 +457,22 @@ SPEC_REFERENCE="
 
 **Generated from**: \`$SPEC_FILE\`
 **Generated on**: $TODAY
-**Generator**: spec-to-prp.sh v1.0
+**Generator**: spec-to-prp.sh v1.1
+
+### Thinking Level Analysis
+
+| Factor | Value | Assessment |
+|--------|-------|------------|
+| Complexity indicators | $COMPLEXITY_INDICATORS | $(if [[ $COMPLEXITY_INDICATORS -ge 4 ]]; then echo "Elevated"; else echo "Normal"; fi) |
+| Domains involved | $DOMAIN_COUNT | $(if [[ $DOMAIN_COUNT -gt 1 ]]; then echo "Multiple"; else echo "Single"; fi) |
+| Invariants applicable | $INVARIANT_COUNT | $(if [[ $INVARIANT_COUNT -gt 15 ]]; then echo "Many"; else echo "Standard"; fi) |
+
+**Recommended Thinking Level**: $THINKING_LEVEL
+**Reason**: $THINKING_REASON
+
+### Relevant Patterns
+
+${PATTERN_LINKS:-"No specific patterns identified - see examples/ directory for available patterns"}
 
 ### Extracted Requirements
 
@@ -356,7 +488,7 @@ $REQUIREMENTS
 OUTPUT_CONTENT="$OUTPUT_CONTENT$SPEC_REFERENCE"
 
 # ============================================================================
-# Step 7: Write Output
+# Step 9: Write Output
 # ============================================================================
 
 echo -e "${BLUE}💾 Writing output:${NC} $OUTPUT_FILE"
@@ -371,7 +503,7 @@ echo -e "${GREEN}✅ PRP generated${NC}"
 echo ""
 
 # ============================================================================
-# Step 8: Run Quality Check
+# Step 10: Run Quality Check
 # ============================================================================
 
 echo -e "${BLUE}🔍 Running quality check...${NC}"

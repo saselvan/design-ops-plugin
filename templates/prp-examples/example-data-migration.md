@@ -410,7 +410,96 @@ IF dms_task_failed:
 
 ---
 
-## 8. State Transitions
+## 8. Validation Commands
+
+Run these commands to verify the Aurora migration:
+
+### 8.1 Test Verification
+
+```bash
+# Connection test to Aurora
+psql "$AURORA_URL" -c "SELECT 1 AS connection_test"
+
+# Row count comparison (source vs target)
+./scripts/compare-row-counts.sh source target
+
+# Checksum validation for critical tables
+./scripts/validate-checksums.sh orders users transactions
+```
+
+### 8.2 Code Quality
+
+```bash
+# Validate DMS task configuration
+aws dms describe-replication-tasks --filters Name=replication-task-id,Values=postgres-aurora \
+  | jq '.ReplicationTasks[0].Status'
+
+# Check for schema drift
+pg_dump --schema-only "$SOURCE_URL" > /tmp/source.sql
+pg_dump --schema-only "$AURORA_URL" > /tmp/target.sql
+diff /tmp/source.sql /tmp/target.sql
+```
+
+### 8.3 Integration Checks
+
+```bash
+# DMS replication lag
+aws cloudwatch get-metric-statistics \
+  --namespace "AWS/DMS" \
+  --metric-name "CDCLatencySource" \
+  --dimensions Name=ReplicationInstanceIdentifier,Value=dms-instance \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 300 \
+  --statistics Average
+
+# Application health with Aurora
+curl -sf http://localhost:8080/health/database && echo "APP+DB HEALTHY"
+
+# Read replica lag check
+psql "$AURORA_READER_URL" -c "SELECT NOW() - pg_last_xact_replay_timestamp() AS replication_lag"
+```
+
+### 8.4 Build Verification
+
+```bash
+# Verify connection string abstraction
+grep -r "DATABASE_URL" src/ | wc -l  # Should be 0 (use abstraction)
+
+# Test rollback procedure (dry run)
+./scripts/rollback-dryrun.sh
+
+# Verify monitoring dashboards
+aws cloudwatch describe-dashboards --dashboard-names "aurora-migration" | jq '.DashboardEntries[0].DashboardName'
+```
+
+---
+
+## 9. Recommended Thinking Level
+
+### Assessment
+
+| Factor | Value | Impact |
+|--------|-------|--------|
+| Confidence Score | 6.8/10 | Think carefully |
+| Domains Involved | 1 (data-architecture) | Think |
+| Invariants Applied | 15 | Think |
+| Files Affected | ~5 (infra) + app connections | Think |
+| Pattern Availability | Good (DMS is standard) | Normal |
+
+### Recommendation
+
+**Overall Level**: Think Hard
+
+**Apply higher thinking to**:
+- Cutover timing and rollback window decisions
+- Data validation query design
+- Replication lag threshold tuning
+- 90-day parallel run cost monitoring
+
+---
+
+## 10. State Transitions
 
 ```
 PROJECT_STATE:
@@ -438,7 +527,7 @@ PROJECT_STATE:
 
 ---
 
-## 9. Execution Log
+## 11. Execution Log
 
 ### Phase Completion
 
