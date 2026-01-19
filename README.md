@@ -325,11 +325,29 @@ cd test-integration && ./real-project-test.sh
 
 ---
 
+## Acknowledgments
+
+Design Ops v2.0 was built by analyzing and synthesizing ideas from leading agentic engineering methodologies:
+
+| Project | Author | Key Inspiration |
+|---------|--------|-----------------|
+| [Context Engineering](https://github.com/coleam00/context-engineering-intro) | Cole Medin | PRD structure, context file organization, validation gates |
+| [Spec-Kit](https://github.com/spec-kit/spec-kit) | Spec-Kit Team | Spec validation patterns, invariant-based checking |
+| [BMAD Method](https://github.com/bmadcode/BMAD-METHOD) | BMAD | Multi-agent orchestration, role-based prompting |
+| [Claude Code](https://github.com/anthropics/claude-code) | Anthropic | Skill system architecture, CLI patterns |
+
+Additional influences from foundational works:
+- **The Pragmatic Programmer** (Hunt & Thomas) - Design by contract
+- **About Face** (Alan Cooper) - Goal-directed design, personas
+- **Test-Driven Development** (Kent Beck) - Validation-first methodology
+- **Clean Architecture** (Robert Martin) - Separation of concerns
+
+---
+
 ## References
 
-- [Comprehensive Agentic Engineering Analysis](docs/comprehensive-analysis.md)
-- [System Invariants](system-invariants.md)
-- [Cole Medin's Context Engineering](https://github.com/coleam00/context-engineering-intro)
+- [System Invariants](system-invariants.md) - All 43 invariants explained
+- [Confidence Rubric](templates/confidence-rubric.md) - Scoring methodology
 
 ---
 
