@@ -323,8 +323,8 @@ get_llm_assessment() {
     echo -e "${BLUE}━━━ LLM Advisory Assessment ━━━${NC}"
     echo -e "${CYAN}Getting suggestions (not auto-fixing)...${NC}"
 
-    # JSON schema for structured output
-    local schema='{"type":"object","properties":{"grade":{"type":"string","enum":["PASS","NEEDS_WORK","FAIL"]},"summary":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"}},"strengths":{"type":"array","items":{"type":"string"}}},"required":["grade","summary","suggestions"]}'
+    # JSON schema for structured output - no grades, just suggestions
+    local schema='{"type":"object","properties":{"summary":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"}},"strengths":{"type":"array","items":{"type":"string"}}},"required":["summary","suggestions"]}'
 
     local prompt
     if [[ "$type" == "spec" ]]; then
@@ -334,9 +334,8 @@ SPECIFICATION:
 $content
 
 Provide:
-- grade: PASS (solid spec), NEEDS_WORK (has gaps), or FAIL (major issues)
-- summary: One sentence assessment
-- suggestions: 2-5 specific actionable improvements
+- summary: One sentence describing what this spec covers
+- suggestions: 2-5 specific actionable improvements (things to consider, not mandates)
 - strengths: 1-2 things done well"
     else
         prompt="Review this PRP (Product Requirements Prompt) and provide feedback. Be concise and actionable.
@@ -345,9 +344,8 @@ PRP:
 $content
 
 Provide:
-- grade: PASS (ready to execute), NEEDS_WORK (needs refinement), or FAIL (not executable)
-- summary: One sentence assessment
-- suggestions: 2-5 specific actionable improvements
+- summary: One sentence describing what this PRP covers
+- suggestions: 2-5 specific actionable improvements (things to consider, not mandates)
 - strengths: 1-2 things done well"
     fi
 
@@ -366,16 +364,14 @@ Provide:
     fi
 
     # Parse the structured JSON response
-    local grade summary
-    grade=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('grade','SKIPPED'))" 2>/dev/null)
+    local summary
     summary=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))" 2>/dev/null)
 
     echo ""
-    echo -e "Grade: ${CYAN}$grade${NC}"
     echo -e "Summary: $summary"
     echo ""
 
-    echo -e "${YELLOW}Suggestions (for human to consider):${NC}"
+    echo -e "${YELLOW}Suggestions (for you to consider):${NC}"
     echo "$result" | python3 -c "
 import json, sys
 try:
@@ -393,7 +389,7 @@ except Exception as e:
 " 2>/dev/null
 
     echo ""
-    echo "$grade"
+    echo "DONE"  # Signal completion, not a grade
 }
 
 # ============================================================================
@@ -568,8 +564,8 @@ cmd_stress_test() {
         echo -e "${BLUE}━━━ LLM Deep Analysis ━━━${NC}"
         echo -e "${CYAN}Analyzing completeness...${NC}"
 
-        # JSON schema for structured output
-        local schema='{"type":"object","properties":{"coverage_grade":{"type":"string","enum":["PASS","NEEDS_WORK","FAIL"]},"summary":{"type":"string"},"missing_requirements":{"type":"array","items":{"type":"string"}},"missing_failure_modes":{"type":"array","items":{"type":"string"}},"critical_questions":{"type":"array","items":{"type":"string"}}},"required":["coverage_grade","summary","critical_questions"]}'
+        # JSON schema for structured output - no grades, just suggestions
+        local schema='{"type":"object","properties":{"summary":{"type":"string"},"missing_requirements":{"type":"array","items":{"type":"string"}},"missing_failure_modes":{"type":"array","items":{"type":"string"}},"critical_questions":{"type":"array","items":{"type":"string"}}},"required":["summary","critical_questions"]}'
 
         local prompt="You are a QA engineer stress-testing a specification for completeness.
 
@@ -593,11 +589,10 @@ $journeys_content"
         prompt="$prompt
 
 Analyze this spec for completeness. Provide:
-- coverage_grade: PASS (comprehensive), NEEDS_WORK (has gaps), FAIL (major gaps)
-- summary: One sentence assessment
-- missing_requirements: Requirements not addressed (max 5)
-- missing_failure_modes: Failure scenarios not handled (max 5)
-- critical_questions: Questions that must be answered before implementation (max 5)"
+- summary: One sentence describing what this spec covers
+- missing_requirements: Requirements that seem unaddressed (max 5, or empty if comprehensive)
+- missing_failure_modes: Failure scenarios worth considering (max 5, or empty if comprehensive)
+- critical_questions: Questions to consider before implementation (max 5)"
 
         local raw_result result
         raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
@@ -608,17 +603,15 @@ Analyze this spec for completeness. Provide:
         track_cost "$prompt" "$result"
 
         if [[ -n "$result" && "$result" != "{}" ]]; then
-            local grade summary
-            grade=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('coverage_grade','SKIPPED'))" 2>/dev/null)
+            local summary
             summary=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))" 2>/dev/null)
 
             echo ""
-            echo -e "Coverage Grade: ${CYAN}$grade${NC}"
             echo -e "Summary: $summary"
             echo ""
 
             # Show missing requirements
-            echo -e "${YELLOW}Missing Requirements:${NC}"
+            echo -e "${YELLOW}Requirements to Consider:${NC}"
             echo "$result" | python3 -c "
 import json, sys
 try:
@@ -633,9 +626,9 @@ except:
     print('  (Could not parse)')
 " 2>/dev/null
 
-            # Show missing failure modes
+            # Show failure modes to consider
             echo ""
-            echo -e "${YELLOW}Unaddressed Failure Modes:${NC}"
+            echo -e "${YELLOW}Failure Modes to Consider:${NC}"
             echo "$result" | python3 -c "
 import json, sys
 try:
@@ -650,9 +643,9 @@ except:
     print('  (Could not parse)')
 " 2>/dev/null
 
-            # Show critical questions
+            # Show questions to consider
             echo ""
-            echo -e "${RED}Critical Questions to Answer:${NC}"
+            echo -e "${YELLOW}Questions to Consider:${NC}"
             echo "$result" | python3 -c "
 import json, sys
 try:
@@ -738,18 +731,19 @@ cmd_validate() {
     echo -e "${CYAN}               correctness. The suggestions above matter more than this summary.${NC}"
     echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
 
+    # Status based on structural checks only (LLM just provides suggestions)
     if [[ "$struct_grade" == "FAIL" ]]; then
         echo -e "  Status: ${RED}STRUCTURAL ISSUES${NC}"
         echo -e "  Missing required sections or has unfilled placeholders."
         echo -e "  ${YELLOW}→ Fix structural issues, then review suggestions above.${NC}"
-    elif [[ "$struct_grade" == "NEEDS_WORK" ]] || [[ "$llm_grade" == "NEEDS_WORK" ]]; then
+    elif [[ "$struct_grade" == "NEEDS_WORK" ]]; then
         echo -e "  Status: ${YELLOW}ITEMS TO REVIEW${NC}"
         echo -e "  Found potential clarity issues. May or may not apply."
         echo -e "  ${YELLOW}→ Review the suggestions above. You decide what's valid.${NC}"
     else
         echo -e "  Status: ${GREEN}NO OBVIOUS GAPS${NC}"
-        echo -e "  Basic clarity checks passed."
-        echo -e "  ${YELLOW}→ This doesn't mean it's perfect. Review the suggestions anyway.${NC}"
+        echo -e "  Basic structure checks passed."
+        echo -e "  ${YELLOW}→ Review the suggestions above anyway.${NC}"
     fi
 
     echo ""
@@ -838,18 +832,19 @@ cmd_check() {
     echo -e "${CYAN}               the requirements are correct. The suggestions matter more.${NC}"
     echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
 
+    # Status based on structural checks only (LLM just provides suggestions)
     if [[ "$struct_grade" == "FAIL" ]]; then
         echo -e "  Status: ${RED}STRUCTURAL ISSUES${NC}"
         echo -e "  PRP is missing sections or has unfilled placeholders."
         echo -e "  ${YELLOW}→ Fix structural issues before implementation.${NC}"
-    elif [[ "$struct_grade" == "NEEDS_WORK" ]] || [[ "$llm_grade" == "NEEDS_WORK" ]]; then
+    elif [[ "$struct_grade" == "NEEDS_WORK" ]]; then
         echo -e "  Status: ${YELLOW}ITEMS TO REVIEW${NC}"
         echo -e "  Found potential issues. May or may not apply to your context."
         echo -e "  ${YELLOW}→ Review the suggestions above. You decide what matters.${NC}"
     else
         echo -e "  Status: ${GREEN}NO OBVIOUS GAPS${NC}"
         echo -e "  Basic PRP structure checks passed."
-        echo -e "  ${YELLOW}→ This doesn't guarantee correctness. Review it yourself.${NC}"
+        echo -e "  ${YELLOW}→ Review the suggestions above anyway.${NC}"
     fi
 
     echo ""
