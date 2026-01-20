@@ -213,7 +213,7 @@ check_spec_structure() {
 
     # Check for vague words (warning only)
     local vague_count
-    vague_count=$(echo "$content" | grep -ciE "properly|efficiently|adequate|reasonable|good quality|as needed" || echo "0")
+    vague_count=$(echo "$content" | grep -ciE "properly|efficiently|adequate|reasonable|good quality|as needed" 2>/dev/null) || vague_count=0
     if [[ $vague_count -gt 3 ]]; then
         warnings+=("Found $vague_count vague terms (properly, efficiently, etc.)")
     fi
@@ -323,56 +323,52 @@ get_llm_assessment() {
     echo -e "${BLUE}━━━ LLM Advisory Assessment ━━━${NC}"
     echo -e "${CYAN}Getting suggestions (not auto-fixing)...${NC}"
 
+    # JSON schema for structured output
+    local schema='{"type":"object","properties":{"grade":{"type":"string","enum":["PASS","NEEDS_WORK","FAIL"]},"summary":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"}},"strengths":{"type":"array","items":{"type":"string"}}},"required":["grade","summary","suggestions"]}'
+
     local prompt
     if [[ "$type" == "spec" ]]; then
-        prompt="Review this specification and provide suggestions. Be concise.
+        prompt="Review this specification and provide feedback. Be concise and actionable.
 
 SPECIFICATION:
 $content
 
-Respond with JSON only:
-{
-  \"grade\": \"PASS|NEEDS_WORK|FAIL\",
-  \"summary\": \"One sentence assessment\",
-  \"suggestions\": [
-    \"Specific actionable suggestion 1\",
-    \"Specific actionable suggestion 2\"
-  ],
-  \"strengths\": [\"What's good about this spec\"]
-}"
+Provide:
+- grade: PASS (solid spec), NEEDS_WORK (has gaps), or FAIL (major issues)
+- summary: One sentence assessment
+- suggestions: 2-5 specific actionable improvements
+- strengths: 1-2 things done well"
     else
-        prompt="Review this PRP (Product Requirements Prompt) and provide suggestions. Be concise.
+        prompt="Review this PRP (Product Requirements Prompt) and provide feedback. Be concise and actionable.
 
 PRP:
 $content
 
-Respond with JSON only:
-{
-  \"grade\": \"PASS|NEEDS_WORK|FAIL\",
-  \"summary\": \"One sentence assessment\",
-  \"suggestions\": [
-    \"Specific actionable suggestion 1\",
-    \"Specific actionable suggestion 2\"
-  ],
-  \"missing\": [\"Any critical missing elements\"]
-}"
+Provide:
+- grade: PASS (ready to execute), NEEDS_WORK (needs refinement), or FAIL (not executable)
+- summary: One sentence assessment
+- suggestions: 2-5 specific actionable improvements
+- strengths: 1-2 things done well"
     fi
 
-    local result
-    result=$(call_claude "$prompt")
+    local raw_result result
+    raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
 
-    local json
-    json=$(extract_json "$result")
+    # Extract structured_output from the wrapper JSON
+    result=$(echo "$raw_result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('structured_output',{})))" 2>/dev/null)
 
-    if [[ "$json" == "{}" ]]; then
-        echo -e "${YELLOW}Could not parse LLM response. Raw output:${NC}"
-        echo "$result" | head -20
+    track_cost "$prompt" "$result"
+
+    if [[ -z "$result" || "$result" == "{}" ]]; then
+        echo -e "${YELLOW}LLM call failed or returned empty${NC}"
+        echo "SKIPPED"
         return
     fi
 
+    # Parse the structured JSON response
     local grade summary
-    grade=$(parse_json "$json" "grade")
-    summary=$(parse_json "$json" "summary")
+    grade=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('grade','SKIPPED'))" 2>/dev/null)
+    summary=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))" 2>/dev/null)
 
     echo ""
     echo -e "Grade: ${CYAN}$grade${NC}"
@@ -380,14 +376,20 @@ Respond with JSON only:
     echo ""
 
     echo -e "${YELLOW}Suggestions (for human to consider):${NC}"
-    echo "$json" | python3 -c "
+    echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
     for i, s in enumerate(data.get('suggestions', [])[:5], 1):
         print(f'  {i}. {s}')
-except:
-    print('  (Could not parse suggestions)')
+    strengths = data.get('strengths', [])
+    if strengths:
+        print()
+        print('Strengths:')
+        for s in strengths[:3]:
+            print(f'  ✓ {s}')
+except Exception as e:
+    print(f'  (Could not parse: {e})')
 " 2>/dev/null
 
     echo ""
@@ -566,6 +568,9 @@ cmd_stress_test() {
         echo -e "${BLUE}━━━ LLM Deep Analysis ━━━${NC}"
         echo -e "${CYAN}Analyzing completeness...${NC}"
 
+        # JSON schema for structured output
+        local schema='{"type":"object","properties":{"coverage_grade":{"type":"string","enum":["PASS","NEEDS_WORK","FAIL"]},"summary":{"type":"string"},"missing_requirements":{"type":"array","items":{"type":"string"}},"missing_failure_modes":{"type":"array","items":{"type":"string"}},"critical_questions":{"type":"array","items":{"type":"string"}}},"required":["coverage_grade","summary","critical_questions"]}'
+
         local prompt="You are a QA engineer stress-testing a specification for completeness.
 
 SPECIFICATION:
@@ -587,42 +592,25 @@ $journeys_content"
 
         prompt="$prompt
 
-Analyze this spec and respond with JSON:
-{
-  \"coverage_grade\": \"PASS|NEEDS_WORK|FAIL\",
-  \"requirements_coverage\": {
-    \"covered\": [\"requirement 1\", \"requirement 2\"],
-    \"missing\": [\"requirement X not addressed\"]
-  },
-  \"user_journeys\": {
-    \"covered\": [\"journey 1\"],
-    \"missing\": [\"what happens when user does X?\"]
-  },
-  \"failure_modes\": {
-    \"addressed\": [\"API timeout handled\"],
-    \"missing\": [\"What if database is down?\", \"What if user has no internet?\"]
-  },
-  \"edge_cases\": {
-    \"addressed\": [\"empty list\"],
-    \"missing\": [\"max items exceeded\", \"special characters in input\"]
-  },
-  \"critical_questions\": [
-    \"What happens if X?\",
-    \"How should the system behave when Y?\"
-  ],
-  \"summary\": \"One sentence assessment of completeness\"
-}"
+Analyze this spec for completeness. Provide:
+- coverage_grade: PASS (comprehensive), NEEDS_WORK (has gaps), FAIL (major gaps)
+- summary: One sentence assessment
+- missing_requirements: Requirements not addressed (max 5)
+- missing_failure_modes: Failure scenarios not handled (max 5)
+- critical_questions: Questions that must be answered before implementation (max 5)"
 
-        local result
-        result=$(call_claude "$prompt")
+        local raw_result result
+        raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
 
-        local json
-        json=$(extract_json "$result")
+        # Extract structured_output from the wrapper JSON
+        result=$(echo "$raw_result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('structured_output',{})))" 2>/dev/null)
 
-        if [[ "$json" != "{}" ]]; then
+        track_cost "$prompt" "$result"
+
+        if [[ -n "$result" && "$result" != "{}" ]]; then
             local grade summary
-            grade=$(parse_json "$json" "coverage_grade")
-            summary=$(parse_json "$json" "summary")
+            grade=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('coverage_grade','SKIPPED'))" 2>/dev/null)
+            summary=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))" 2>/dev/null)
 
             echo ""
             echo -e "Coverage Grade: ${CYAN}$grade${NC}"
@@ -631,11 +619,11 @@ Analyze this spec and respond with JSON:
 
             # Show missing requirements
             echo -e "${YELLOW}Missing Requirements:${NC}"
-            echo "$json" | python3 -c "
+            echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
-    missing = data.get('requirements_coverage', {}).get('missing', [])
+    missing = data.get('missing_requirements', [])
     if missing:
         for m in missing[:5]:
             print(f'  ✗ {m}')
@@ -648,11 +636,11 @@ except:
             # Show missing failure modes
             echo ""
             echo -e "${YELLOW}Unaddressed Failure Modes:${NC}"
-            echo "$json" | python3 -c "
+            echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
-    missing = data.get('failure_modes', {}).get('missing', [])
+    missing = data.get('missing_failure_modes', [])
     if missing:
         for m in missing[:5]:
             print(f'  ? {m}')
@@ -665,7 +653,7 @@ except:
             # Show critical questions
             echo ""
             echo -e "${RED}Critical Questions to Answer:${NC}"
-            echo "$json" | python3 -c "
+            echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -681,7 +669,7 @@ except:
 
             echo ""
         else
-            echo -e "${YELLOW}Could not parse LLM response${NC}"
+            echo -e "${YELLOW}LLM call failed or returned empty${NC}"
         fi
     fi
 
@@ -729,13 +717,18 @@ cmd_validate() {
     echo ""
 
     # Deterministic checks (always run)
-    local struct_grade
-    struct_grade=$(check_spec_structure "$file" | tail -1)
+    local struct_output struct_grade
+    struct_output=$(check_spec_structure "$file")
+    echo "$struct_output" | sed '$d'  # Display all but last line (which is grade)
+    struct_grade=$(echo "$struct_output" | tail -1)
 
     local llm_grade="SKIPPED"
     if [[ "$quick" != "true" ]]; then
         echo ""
-        llm_grade=$(get_llm_assessment "$file" "spec" | tail -1)
+        local llm_output
+        llm_output=$(get_llm_assessment "$file" "spec")
+        echo "$llm_output" | sed '$d'
+        llm_grade=$(echo "$llm_output" | tail -1)
     fi
 
     # ━━━ Summary ━━━
@@ -824,13 +817,18 @@ cmd_check() {
     echo -e "File: ${CYAN}$file${NC}"
     echo ""
 
-    local struct_grade
-    struct_grade=$(check_prp_structure "$file" | tail -1)
+    local struct_output struct_grade
+    struct_output=$(check_prp_structure "$file")
+    echo "$struct_output" | sed '$d'  # Display all but last line (which is grade)
+    struct_grade=$(echo "$struct_output" | tail -1)
 
     local llm_grade="SKIPPED"
     if [[ "$quick" != "true" ]]; then
         echo ""
-        llm_grade=$(get_llm_assessment "$file" "prp" | tail -1)
+        local llm_output
+        llm_output=$(get_llm_assessment "$file" "prp")
+        echo "$llm_output" | sed '$d'
+        llm_grade=$(echo "$llm_output" | tail -1)
     fi
 
     # ━━━ Summary ━━━
