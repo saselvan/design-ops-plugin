@@ -18,7 +18,7 @@
 
 set -e
 
-VERSION="3.1.0"
+VERSION="3.2.0"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -50,13 +50,15 @@ usage() {
     echo "  --verbose            Show detailed output"
     echo ""
     echo "Workflow:"
-    echo "  1. stress-test  →  Is spec COMPLETE? (covers all requirements?)"
-    echo "  2. validate     →  Is spec CLEAR? (well-structured, unambiguous?)"
+    echo "  1. stress-test  →  Catch obvious gaps in completeness"
+    echo "  2. validate     →  Catch obvious gaps in clarity"
     echo "  3. generate     →  Create PRP"
-    echo "  4. check        →  Verify PRP quality"
-    echo "  5. Human review →  You approve before implementation"
+    echo "  4. check        →  Review PRP before execution"
+    echo "  5. Human review →  YOU decide what's actually valid"
     echo ""
-    echo "Philosophy: LLM suggests, human decides. No auto-fix loops."
+    echo "Philosophy: This is a CHECKLIST ASSISTANT, not a judge."
+    echo "            It catches obvious gaps. YOU catch subtle design flaws."
+    echo "            The suggestions matter more than the grade."
     exit 1
 }
 
@@ -683,23 +685,25 @@ except:
         fi
     fi
 
-    # ━━━ Final Grade ━━━
+    # ━━━ Summary ━━━
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  LIMITATIONS: This catches obvious gaps, not subtle design flaws.${NC}"
+    echo -e "${CYAN}               The suggestions above matter more than this summary.${NC}"
+    echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
 
-    local final_grade
     if [[ ${#issues[@]} -ge 2 ]]; then
-        final_grade="FAIL"
-        echo -e "  Final Grade: ${RED}$final_grade${NC}"
-        echo -e "  ${RED}Spec has significant gaps. Address the issues above before proceeding.${NC}"
+        echo -e "  Status: ${RED}REVIEW REQUIRED${NC}"
+        echo -e "  Found ${RED}${#issues[@]} gaps${NC} that likely need addressing."
+        echo -e "  ${YELLOW}→ Review the suggestions above. You decide what's valid.${NC}"
     elif [[ ${#issues[@]} -ge 1 ]] || [[ ${#warnings[@]} -ge 3 ]]; then
-        final_grade="NEEDS_WORK"
-        echo -e "  Final Grade: ${YELLOW}$final_grade${NC}"
-        echo -e "  ${YELLOW}Spec is incomplete. Review gaps and add missing coverage.${NC}"
+        echo -e "  Status: ${YELLOW}ITEMS TO REVIEW${NC}"
+        echo -e "  Found some potential gaps. May or may not apply to your context."
+        echo -e "  ${YELLOW}→ Review the suggestions above. You decide what's valid.${NC}"
     else
-        final_grade="PASS"
-        echo -e "  Final Grade: ${GREEN}$final_grade${NC}"
-        echo -e "  ${GREEN}Spec appears comprehensive. Proceed to validation.${NC}"
+        echo -e "  Status: ${GREEN}NO OBVIOUS GAPS${NC}"
+        echo -e "  Basic completeness checks passed."
+        echo -e "  ${YELLOW}→ This doesn't mean it's perfect. Review the suggestions anyway.${NC}"
     fi
 
     echo ""
@@ -734,25 +738,29 @@ cmd_validate() {
         llm_grade=$(get_llm_assessment "$file" "spec" | tail -1)
     fi
 
-    # Final grade (deterministic takes precedence)
+    # ━━━ Summary ━━━
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  LIMITATIONS: This checks structure and common issues, not semantic${NC}"
+    echo -e "${CYAN}               correctness. The suggestions above matter more than this summary.${NC}"
+    echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
 
-    local final_grade
     if [[ "$struct_grade" == "FAIL" ]]; then
-        final_grade="FAIL"
-        echo -e "  Final Grade: ${RED}$final_grade${NC}"
-        echo -e "  ${RED}Fix the structural issues before proceeding.${NC}"
+        echo -e "  Status: ${RED}STRUCTURAL ISSUES${NC}"
+        echo -e "  Missing required sections or has unfilled placeholders."
+        echo -e "  ${YELLOW}→ Fix structural issues, then review suggestions above.${NC}"
     elif [[ "$struct_grade" == "NEEDS_WORK" ]] || [[ "$llm_grade" == "NEEDS_WORK" ]]; then
-        final_grade="NEEDS_WORK"
-        echo -e "  Final Grade: ${YELLOW}$final_grade${NC}"
-        echo -e "  ${YELLOW}Review suggestions above. You may proceed, but consider improvements.${NC}"
+        echo -e "  Status: ${YELLOW}ITEMS TO REVIEW${NC}"
+        echo -e "  Found potential clarity issues. May or may not apply."
+        echo -e "  ${YELLOW}→ Review the suggestions above. You decide what's valid.${NC}"
     else
-        final_grade="PASS"
-        echo -e "  Final Grade: ${GREEN}$final_grade${NC}"
-        echo -e "  ${GREEN}Ready for PRP generation.${NC}"
+        echo -e "  Status: ${GREEN}NO OBVIOUS GAPS${NC}"
+        echo -e "  Basic clarity checks passed."
+        echo -e "  ${YELLOW}→ This doesn't mean it's perfect. Review the suggestions anyway.${NC}"
     fi
 
+    echo ""
+    echo -e "  ${CYAN}Next step: ./design-ops-v3.sh generate $file${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
     [[ "$quick" != "true" ]] && show_cost_summary
@@ -825,20 +833,29 @@ cmd_check() {
         llm_grade=$(get_llm_assessment "$file" "prp" | tail -1)
     fi
 
+    # ━━━ Summary ━━━
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  LIMITATIONS: This checks PRP structure and executability, not whether${NC}"
+    echo -e "${CYAN}               the requirements are correct. The suggestions matter more.${NC}"
+    echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
 
     if [[ "$struct_grade" == "FAIL" ]]; then
-        echo -e "  Final Grade: ${RED}FAIL${NC}"
-        echo -e "  ${RED}Fix structural issues before using this PRP.${NC}"
+        echo -e "  Status: ${RED}STRUCTURAL ISSUES${NC}"
+        echo -e "  PRP is missing sections or has unfilled placeholders."
+        echo -e "  ${YELLOW}→ Fix structural issues before implementation.${NC}"
     elif [[ "$struct_grade" == "NEEDS_WORK" ]] || [[ "$llm_grade" == "NEEDS_WORK" ]]; then
-        echo -e "  Final Grade: ${YELLOW}NEEDS_WORK${NC}"
-        echo -e "  ${YELLOW}Consider the suggestions above before proceeding.${NC}"
+        echo -e "  Status: ${YELLOW}ITEMS TO REVIEW${NC}"
+        echo -e "  Found potential issues. May or may not apply to your context."
+        echo -e "  ${YELLOW}→ Review the suggestions above. You decide what matters.${NC}"
     else
-        echo -e "  Final Grade: ${GREEN}PASS${NC}"
-        echo -e "  ${GREEN}PRP looks ready for implementation.${NC}"
+        echo -e "  Status: ${GREEN}NO OBVIOUS GAPS${NC}"
+        echo -e "  Basic PRP structure checks passed."
+        echo -e "  ${YELLOW}→ This doesn't guarantee correctness. Review it yourself.${NC}"
     fi
 
+    echo ""
+    echo -e "  ${CYAN}Next step: Human review, then implementation${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
     [[ "$quick" != "true" ]] && show_cost_summary

@@ -1,4 +1,12 @@
-# Design Ops v3.1 - Simplified Pipeline
+# Design Ops v3.2 - Simplified Pipeline
+
+## Core Philosophy
+
+> **This is a CHECKLIST ASSISTANT, not a judge.**
+> It catches obvious gaps. YOU catch subtle design flaws.
+> The suggestions matter more than the status.
+
+Inspired by Rasmus Widing's PRP methodology: *"Never, ever skip the validation step"* - but the human is the final checkpoint, not the tool.
 
 ## Philosophy Change
 
@@ -43,8 +51,8 @@
 └─────────────────────────────────────────────────────────────────┘
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  STEP 5: Human Review                                           │
-│  You approve before implementation                              │
+│  STEP 5: Human Review (MOST IMPORTANT)                          │
+│  YOU approve before implementation. Tool doesn't replace this.  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,14 +79,14 @@ flowchart TB
         L3[Human decides]
     end
 
-    subgraph Layer3["Layer 3: Human Review"]
-        H1[Review output]
-        H2[Make fixes manually]
-        H3[Approve for use]
+    subgraph Layer3["Layer 3: Human Review (Critical)"]
+        H1[Review suggestions]
+        H2[Apply judgment]
+        H3[Make final call]
     end
 
     SPEC[Spec File] --> D1 --> D2 --> D3 --> D4
-    D4 --> |PASS/NEEDS_WORK/FAIL| L1
+    D4 --> |Suggestions| L1
     L1 --> L2 --> L3
     L3 --> H1 --> H2 --> H3
     H3 --> DONE[Ready for Implementation]
@@ -111,11 +119,11 @@ flowchart TB
 ./design-ops-v3.sh validate specs/my-feature.md --quick
 ```
 
-## Stress Test Output Example
+## Example Output
 
 ```
 ╔═══════════════════════════════════════════════════════════════╗
-║  SPEC STRESS TEST (v3.1.0) - Completeness Check               ║
+║  SPEC STRESS TEST (v3.2.0) - Completeness Check               ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 ━━━ Deterministic Coverage Checks ━━━
@@ -129,7 +137,6 @@ flowchart TB
 Basic Coverage: 4/6 (66%)
 
 ━━━ LLM Deep Analysis ━━━
-Coverage Grade: NEEDS_WORK
 
 Missing Requirements:
   ✗ Password reset flow not specified
@@ -145,21 +152,32 @@ Critical Questions to Answer:
   3. What's the retry policy for failed API calls?
 
 ═══════════════════════════════════════════════════════════════
-  Final Grade: NEEDS_WORK
-  Spec is incomplete. Review gaps and add missing coverage.
+  LIMITATIONS: This catches obvious gaps, not subtle design flaws.
+               The suggestions above matter more than this summary.
+───────────────────────────────────────────────────────────────
+  Status: ITEMS TO REVIEW
+  Found some potential gaps. May or may not apply to your context.
+  → Review the suggestions above. You decide what's valid.
 
   Next step: ./design-ops-v3.sh validate specs/my-feature.md
 ═══════════════════════════════════════════════════════════════
 Cost estimate: ~$0.0312 (2841 input + 1203 output tokens)
 ```
 
-## Grades (Not Percentages)
+## Status Labels (Not Grades)
 
-| Grade | Meaning | Action |
-|-------|---------|--------|
-| **PASS** | Meets requirements | Proceed |
-| **NEEDS_WORK** | Has suggestions | Review, then proceed |
-| **FAIL** | Missing required elements | Fix before proceeding |
+| Status | Meaning | Your Action |
+|--------|---------|-------------|
+| **NO OBVIOUS GAPS** | Basic checks passed | Still review suggestions |
+| **ITEMS TO REVIEW** | Found potential issues | Review, decide what applies |
+| **STRUCTURAL ISSUES** | Missing sections/placeholders | Fix structure first |
+| **REVIEW REQUIRED** | Multiple gaps found | Likely needs attention |
+
+**Important:** These are suggestions, not verdicts. The tool can't catch:
+- Semantic correctness (are the requirements *right*?)
+- Business logic errors
+- Subtle design flaws
+- Context-specific issues
 
 ## Cost Tracking
 
@@ -170,15 +188,15 @@ Cost estimate: ~$0.0234 (1523 input + 892 output tokens)
 
 ## What's Different
 
-| Aspect | v2 | v3 |
+| Aspect | v2 | v3.2 |
 |--------|----|----|
 | Auto-fix loops | Yes (up to 5 iterations) | No (one-shot) |
 | LLM role | Authoritative | Advisory |
 | JSON parsing | grep/sed (fragile) | Python (robust) |
-| Threshold | 95% (false precision) | PASS/NEEDS_WORK/FAIL |
+| Output | 95% score (false precision) | Suggestions + status |
 | Cost visibility | None | Every run |
 | Files | 14 shell scripts | 1 shell script |
-| Debugging | "LLM gave wrong score" | Clear deterministic checks |
+| Philosophy | Tool judges | Human judges |
 
 ## Migration
 
@@ -189,6 +207,7 @@ v2 files are preserved but deprecated. Use v3:
 ./spec-to-prp-pipeline.sh spec.md
 
 # New (recommended)
+./design-ops-v3.sh stress-test spec.md
 ./design-ops-v3.sh validate spec.md
 ./design-ops-v3.sh generate spec.md
 ./design-ops-v3.sh check output.md
@@ -198,8 +217,8 @@ v2 files are preserved but deprecated. Use v3:
 
 > "The value is in thinking through requirements, not in automating the validation of that thinking."
 
-v3 helps you think by:
-1. Catching obvious omissions (deterministic)
+v3.2 helps you think by:
+1. Catching obvious omissions (deterministic checks)
 2. Suggesting improvements (LLM advisory)
 3. Letting you decide (human review)
 
@@ -208,3 +227,12 @@ It does NOT try to:
 2. Auto-fix documents
 3. Loop until an arbitrary threshold
 4. Replace human judgment
+5. Be the final word on spec quality
+
+## Version History
+
+| Version | Changes |
+|---------|---------|
+| 3.2.0 | Reframed output: suggestions over grades, explicit limitations |
+| 3.1.0 | Added stress-test command, correct workflow order |
+| 3.0.0 | Initial simplified pipeline, single file |
