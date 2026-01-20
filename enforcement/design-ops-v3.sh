@@ -3,20 +3,22 @@
 #
 # Philosophy: LLM is ADVISORY, human decides. No auto-fix loops.
 #
-# What it does:
-#   1. Validates spec structure (deterministic checks)
-#   2. Gets LLM assessment with suggestions (advisory)
-#   3. Generates PRP from spec (one-shot, no loops)
-#   4. Human reviews and approves
+# Workflow (in order):
+#   1. stress-test  - "Is the spec complete?" (coverage against requirements/journeys)
+#   2. validate     - "Is the spec clear?" (structure, ambiguity)
+#   3. generate     - Create PRP from spec (one-shot)
+#   4. check        - Verify PRP quality
+#   5. Human reviews and approves
 #
 # Usage:
-#   ./design-ops-v3.sh validate <spec-file>     # Check spec quality
-#   ./design-ops-v3.sh generate <spec-file>     # Generate PRP
-#   ./design-ops-v3.sh check <prp-file>         # Check PRP quality
+#   ./design-ops-v3.sh stress-test <spec> [--requirements <file>]  # Coverage check (RUN FIRST)
+#   ./design-ops-v3.sh validate <spec-file>                        # Clarity check
+#   ./design-ops-v3.sh generate <spec-file>                        # Generate PRP
+#   ./design-ops-v3.sh check <prp-file>                            # Check PRP quality
 
 set -e
 
-VERSION="3.0.0"
+VERSION="3.1.0"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -35,14 +37,24 @@ usage() {
     echo ""
     echo "Usage: $0 <command> <file> [options]"
     echo ""
-    echo "Commands:"
-    echo "  validate <spec>    Check spec quality (deterministic + LLM advisory)"
-    echo "  generate <spec>    Generate PRP from spec (one-shot)"
-    echo "  check <prp>        Check PRP quality"
+    echo "Commands (run in this order):"
+    echo "  stress-test <spec>   Check completeness (requirements, journeys, failure modes)"
+    echo "  validate <spec>      Check clarity (structure, ambiguity)"
+    echo "  generate <spec>      Generate PRP from spec (one-shot)"
+    echo "  check <prp>          Check PRP quality"
     echo ""
     echo "Options:"
-    echo "  --quick            Skip LLM assessment (deterministic only)"
-    echo "  --verbose          Show detailed output"
+    echo "  --requirements <f>   Requirements file for stress-test (optional)"
+    echo "  --journeys <f>       User journeys file for stress-test (optional)"
+    echo "  --quick              Skip LLM assessment (deterministic only)"
+    echo "  --verbose            Show detailed output"
+    echo ""
+    echo "Workflow:"
+    echo "  1. stress-test  →  Is spec COMPLETE? (covers all requirements?)"
+    echo "  2. validate     →  Is spec CLEAR? (well-structured, unambiguous?)"
+    echo "  3. generate     →  Create PRP"
+    echo "  4. check        →  Verify PRP quality"
+    echo "  5. Human review →  You approve before implementation"
     echo ""
     echo "Philosophy: LLM suggests, human decides. No auto-fix loops."
     exit 1
@@ -440,6 +452,264 @@ Output the PRP in markdown, starting with # PRP:"
 # MAIN COMMANDS
 # ============================================================================
 
+cmd_stress_test() {
+    local spec_file="$1"
+    local requirements_file="$2"
+    local journeys_file="$3"
+    local quick="$4"
+
+    [[ ! -f "$spec_file" ]] && { echo -e "${RED}File not found: $spec_file${NC}"; exit 1; }
+
+    local spec_content
+    spec_content=$(cat "$spec_file")
+
+    local requirements_content=""
+    local journeys_content=""
+
+    [[ -n "$requirements_file" ]] && [[ -f "$requirements_file" ]] && requirements_content=$(cat "$requirements_file")
+    [[ -n "$journeys_file" ]] && [[ -f "$journeys_file" ]] && journeys_content=$(cat "$journeys_file")
+
+    echo ""
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║  SPEC STRESS TEST (v$VERSION) - Completeness Check              ║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Spec: ${CYAN}$spec_file${NC}"
+    [[ -n "$requirements_file" ]] && echo -e "Requirements: ${CYAN}$requirements_file${NC}"
+    [[ -n "$journeys_file" ]] && echo -e "User Journeys: ${CYAN}$journeys_file${NC}"
+    echo ""
+
+    # ━━━ Deterministic Coverage Checks ━━━
+    echo -e "${BLUE}━━━ Deterministic Coverage Checks ━━━${NC}"
+
+    local issues=()
+    local warnings=()
+    local coverage_items=0
+    local covered_items=0
+
+    # Check for user journey coverage indicators
+    if echo "$spec_content" | grep -qiE "happy path|success.*path|normal.*flow"; then
+        echo -e "  ${GREEN}✓${NC} Happy path mentioned"
+        ((covered_items++))
+    else
+        warnings+=("Happy path not explicitly described")
+    fi
+    ((coverage_items++))
+
+    if echo "$spec_content" | grep -qiE "error|fail|exception|invalid|edge.case"; then
+        echo -e "  ${GREEN}✓${NC} Error cases mentioned"
+        ((covered_items++))
+    else
+        issues+=("Error/failure cases not addressed")
+    fi
+    ((coverage_items++))
+
+    if echo "$spec_content" | grep -qiE "empty|null|zero|no.*data|missing"; then
+        echo -e "  ${GREEN}✓${NC} Empty/null states mentioned"
+        ((covered_items++))
+    else
+        warnings+=("Empty/null states not explicitly handled")
+    fi
+    ((coverage_items++))
+
+    if echo "$spec_content" | grep -qiE "timeout|offline|unavailable|network|api.*fail"; then
+        echo -e "  ${GREEN}✓${NC} Failure modes mentioned (timeout, offline, etc.)"
+        ((covered_items++))
+    else
+        issues+=("External failure modes not addressed (API down, timeout, offline)")
+    fi
+    ((coverage_items++))
+
+    if echo "$spec_content" | grep -qiE "concurrent|race|simultaneous|parallel"; then
+        echo -e "  ${GREEN}✓${NC} Concurrency considerations mentioned"
+        ((covered_items++))
+    else
+        warnings+=("Concurrency not explicitly addressed (may not apply)")
+    fi
+    ((coverage_items++))
+
+    if echo "$spec_content" | grep -qiE "limit|max|min|bound|threshold|quota"; then
+        echo -e "  ${GREEN}✓${NC} Limits/boundaries mentioned"
+        ((covered_items++))
+    else
+        warnings+=("Limits/boundaries not specified")
+    fi
+    ((coverage_items++))
+
+    echo ""
+
+    # Report issues
+    if [[ ${#issues[@]} -gt 0 ]]; then
+        echo -e "${RED}Gaps (should address):${NC}"
+        for issue in "${issues[@]}"; do
+            echo -e "  ${RED}✗${NC} $issue"
+        done
+        echo ""
+    fi
+
+    if [[ ${#warnings[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}Consider (may not apply):${NC}"
+        for warning in "${warnings[@]}"; do
+            echo -e "  ${YELLOW}?${NC} $warning"
+        done
+        echo ""
+    fi
+
+    local coverage_pct=$((covered_items * 100 / coverage_items))
+    echo -e "Basic Coverage: ${CYAN}$covered_items/$coverage_items ($coverage_pct%)${NC}"
+    echo ""
+
+    # ━━━ LLM Deep Analysis ━━━
+    if [[ "$quick" != "true" ]]; then
+        echo -e "${BLUE}━━━ LLM Deep Analysis ━━━${NC}"
+        echo -e "${CYAN}Analyzing completeness...${NC}"
+
+        local prompt="You are a QA engineer stress-testing a specification for completeness.
+
+SPECIFICATION:
+$spec_content"
+
+        if [[ -n "$requirements_content" ]]; then
+            prompt="$prompt
+
+REQUIREMENTS TO COVER:
+$requirements_content"
+        fi
+
+        if [[ -n "$journeys_content" ]]; then
+            prompt="$prompt
+
+USER JOURNEYS TO COVER:
+$journeys_content"
+        fi
+
+        prompt="$prompt
+
+Analyze this spec and respond with JSON:
+{
+  \"coverage_grade\": \"PASS|NEEDS_WORK|FAIL\",
+  \"requirements_coverage\": {
+    \"covered\": [\"requirement 1\", \"requirement 2\"],
+    \"missing\": [\"requirement X not addressed\"]
+  },
+  \"user_journeys\": {
+    \"covered\": [\"journey 1\"],
+    \"missing\": [\"what happens when user does X?\"]
+  },
+  \"failure_modes\": {
+    \"addressed\": [\"API timeout handled\"],
+    \"missing\": [\"What if database is down?\", \"What if user has no internet?\"]
+  },
+  \"edge_cases\": {
+    \"addressed\": [\"empty list\"],
+    \"missing\": [\"max items exceeded\", \"special characters in input\"]
+  },
+  \"critical_questions\": [
+    \"What happens if X?\",
+    \"How should the system behave when Y?\"
+  ],
+  \"summary\": \"One sentence assessment of completeness\"
+}"
+
+        local result
+        result=$(call_claude "$prompt")
+
+        local json
+        json=$(extract_json "$result")
+
+        if [[ "$json" != "{}" ]]; then
+            local grade summary
+            grade=$(parse_json "$json" "coverage_grade")
+            summary=$(parse_json "$json" "summary")
+
+            echo ""
+            echo -e "Coverage Grade: ${CYAN}$grade${NC}"
+            echo -e "Summary: $summary"
+            echo ""
+
+            # Show missing requirements
+            echo -e "${YELLOW}Missing Requirements:${NC}"
+            echo "$json" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    missing = data.get('requirements_coverage', {}).get('missing', [])
+    if missing:
+        for m in missing[:5]:
+            print(f'  ✗ {m}')
+    else:
+        print('  (None identified)')
+except:
+    print('  (Could not parse)')
+" 2>/dev/null
+
+            # Show missing failure modes
+            echo ""
+            echo -e "${YELLOW}Unaddressed Failure Modes:${NC}"
+            echo "$json" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    missing = data.get('failure_modes', {}).get('missing', [])
+    if missing:
+        for m in missing[:5]:
+            print(f'  ? {m}')
+    else:
+        print('  (None identified)')
+except:
+    print('  (Could not parse)')
+" 2>/dev/null
+
+            # Show critical questions
+            echo ""
+            echo -e "${RED}Critical Questions to Answer:${NC}"
+            echo "$json" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    questions = data.get('critical_questions', [])
+    if questions:
+        for i, q in enumerate(questions[:5], 1):
+            print(f'  {i}. {q}')
+    else:
+        print('  (None - spec looks comprehensive)')
+except:
+    print('  (Could not parse)')
+" 2>/dev/null
+
+            echo ""
+        else
+            echo -e "${YELLOW}Could not parse LLM response${NC}"
+        fi
+    fi
+
+    # ━━━ Final Grade ━━━
+    echo ""
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+
+    local final_grade
+    if [[ ${#issues[@]} -ge 2 ]]; then
+        final_grade="FAIL"
+        echo -e "  Final Grade: ${RED}$final_grade${NC}"
+        echo -e "  ${RED}Spec has significant gaps. Address the issues above before proceeding.${NC}"
+    elif [[ ${#issues[@]} -ge 1 ]] || [[ ${#warnings[@]} -ge 3 ]]; then
+        final_grade="NEEDS_WORK"
+        echo -e "  Final Grade: ${YELLOW}$final_grade${NC}"
+        echo -e "  ${YELLOW}Spec is incomplete. Review gaps and add missing coverage.${NC}"
+    else
+        final_grade="PASS"
+        echo -e "  Final Grade: ${GREEN}$final_grade${NC}"
+        echo -e "  ${GREEN}Spec appears comprehensive. Proceed to validation.${NC}"
+    fi
+
+    echo ""
+    echo -e "  ${CYAN}Next step: ./design-ops-v3.sh validate $spec_file${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+
+    [[ "$quick" != "true" ]] && show_cost_summary
+    echo ""
+}
+
 cmd_validate() {
     local file="$1"
     local quick="$2"
@@ -587,12 +857,16 @@ shift 2
 
 QUICK=false
 VERBOSE=false
+REQUIREMENTS=""
+JOURNEYS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick) QUICK=true; shift ;;
         --verbose) VERBOSE=true; shift ;;
         --output) OUTPUT="$2"; shift 2 ;;
+        --requirements) REQUIREMENTS="$2"; shift 2 ;;
+        --journeys) JOURNEYS="$2"; shift 2 ;;
         *) echo -e "${RED}Unknown option: $1${NC}"; usage ;;
     esac
 done
@@ -602,6 +876,7 @@ command -v claude &> /dev/null || { echo -e "${RED}ERROR: Claude CLI not found${
 command -v python3 &> /dev/null || { echo -e "${RED}ERROR: Python3 not found${NC}"; exit 1; }
 
 case "$COMMAND" in
+    stress-test) cmd_stress_test "$FILE" "$REQUIREMENTS" "$JOURNEYS" "$QUICK" ;;
     validate) cmd_validate "$FILE" "$QUICK" ;;
     generate) cmd_generate "$FILE" "$OUTPUT" ;;
     check) cmd_check "$FILE" "$QUICK" ;;

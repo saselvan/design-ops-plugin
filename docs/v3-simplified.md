@@ -1,4 +1,4 @@
-# Design Ops v3 - Simplified Pipeline
+# Design Ops v3.1 - Simplified Pipeline
 
 ## Philosophy Change
 
@@ -11,7 +11,48 @@
 - Deterministic checks first (fast, free, reliable)
 - LLM provides suggestions (advisory only)
 - Human decides and fixes
-- 1 file, ~400 lines, robust Python JSON parsing
+- 1 file, ~600 lines, robust Python JSON parsing
+
+## The Workflow (Correct Order)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 1: Write Spec (You + Claude)                              │
+│  Together: Define problem, success criteria, scope              │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 2: Stress Test (RUN FIRST)                                │
+│  Question: "Is this spec COMPLETE?"                             │
+│  - Does it cover all requirements?                              │
+│  - Does it handle error cases?                                  │
+│  - Does it address failure modes?                               │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 3: Validate                                               │
+│  Question: "Is this spec CLEAR?"                                │
+│  - Has required sections?                                       │
+│  - No vague terms?                                              │
+│  - Unambiguous?                                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 4: Generate PRP (one-shot)                                │
+│  Create agent-executable PRP from validated spec                │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 5: Human Review                                           │
+│  You approve before implementation                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Why this order?**
+- No point polishing (validate) a spec that's missing half the requirements
+- First: Do we have all the ingredients? (stress-test)
+- Then: Is the recipe written clearly? (validate)
+- Finally: Cook the dish (generate)
 
 ## Architecture
 
@@ -50,17 +91,66 @@ flowchart TB
 ## Usage
 
 ```bash
-# Validate a spec
+# 1. STRESS TEST (run first) - Is spec complete?
+./design-ops-v3.sh stress-test specs/my-feature.md
+
+# With optional requirements/journeys files
+./design-ops-v3.sh stress-test specs/my-feature.md --requirements reqs.md --journeys journeys.md
+
+# 2. VALIDATE - Is spec clear?
 ./design-ops-v3.sh validate specs/my-feature.md
 
-# Generate PRP (one-shot, no loops)
+# 3. GENERATE PRP (one-shot, no loops)
 ./design-ops-v3.sh generate specs/my-feature.md
 
-# Check PRP quality
+# 4. CHECK PRP quality
 ./design-ops-v3.sh check PRPs/my-feature-prp.md
 
 # Quick mode (skip LLM, deterministic only)
+./design-ops-v3.sh stress-test specs/my-feature.md --quick
 ./design-ops-v3.sh validate specs/my-feature.md --quick
+```
+
+## Stress Test Output Example
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  SPEC STRESS TEST (v3.1.0) - Completeness Check               ║
+╚═══════════════════════════════════════════════════════════════╝
+
+━━━ Deterministic Coverage Checks ━━━
+  ✓ Happy path mentioned
+  ✓ Error cases mentioned
+  ✗ Empty/null states not explicitly handled
+  ✗ External failure modes not addressed (API down, timeout, offline)
+  ? Concurrency not explicitly addressed (may not apply)
+  ✓ Limits/boundaries mentioned
+
+Basic Coverage: 4/6 (66%)
+
+━━━ LLM Deep Analysis ━━━
+Coverage Grade: NEEDS_WORK
+
+Missing Requirements:
+  ✗ Password reset flow not specified
+  ✗ Session timeout handling not defined
+
+Unaddressed Failure Modes:
+  ? What if the database is unavailable?
+  ? What if user's session expires mid-operation?
+
+Critical Questions to Answer:
+  1. What happens if the user loses network during upload?
+  2. How should errors be displayed to the user?
+  3. What's the retry policy for failed API calls?
+
+═══════════════════════════════════════════════════════════════
+  Final Grade: NEEDS_WORK
+  Spec is incomplete. Review gaps and add missing coverage.
+
+  Next step: ./design-ops-v3.sh validate specs/my-feature.md
+═══════════════════════════════════════════════════════════════
+Cost estimate: ~$0.0312 (2841 input + 1203 output tokens)
 ```
 
 ## Grades (Not Percentages)
