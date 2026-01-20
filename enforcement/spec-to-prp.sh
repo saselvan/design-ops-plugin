@@ -225,18 +225,11 @@ echo ""
 echo -e "${BLUE}🔧 Loading template:${NC} $TEMPLATE"
 
 # Map template name to file
+# NOTE: All template types use prp-base.md with variable placeholders
+# The example files in prp-examples/ are for reference only, not for templating
 case "$TEMPLATE" in
-    "base")
+    "base"|"api-integration"|"user-feature"|"data-migration")
         TEMPLATE_FILE="$TEMPLATES_DIR/prp-base.md"
-        ;;
-    "api-integration")
-        TEMPLATE_FILE="$TEMPLATES_DIR/prp-examples/example-api-integration.md"
-        ;;
-    "user-feature")
-        TEMPLATE_FILE="$TEMPLATES_DIR/prp-examples/example-user-feature.md"
-        ;;
-    "data-migration")
-        TEMPLATE_FILE="$TEMPLATES_DIR/prp-examples/example-data-migration.md"
         ;;
     *)
         echo -e "${RED}ERROR: Unknown template: $TEMPLATE${NC}"

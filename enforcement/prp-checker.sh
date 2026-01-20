@@ -1,449 +1,454 @@
 #!/bin/bash
-# prp-checker.sh - Quality checker for generated PRPs
+# prp-checker.sh - LLM-Powered PRP Quality Checker v2.0
 #
-# Validates that PRPs have all required sections and meet quality standards.
-# Exit code: 0 if passes (warnings OK), 1 if fails (missing required sections)
+# Uses Claude with Rubric-Based Assessment to validate PRP quality.
+# No regex pattern matching - semantic understanding of quality.
+#
+# Usage:
+#   ./prp-checker.sh <prp-file> [--threshold 90] [--fix]
 
 set -e
 
-# Colors
+VERSION="2.0.0"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-# Counters
-ERRORS=0
-WARNINGS=0
-SCORE=100
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Usage
-usage() {
-    echo "Usage: $0 <prp-file.md> [--verbose]"
-    echo ""
-    echo "Options:"
-    echo "  --verbose    Show detailed check output"
-    echo ""
-    echo "Example:"
-    echo "  $0 output/my-project-prp.md"
-    exit 1
-}
-
-# Check arguments
-if [[ $# -lt 1 ]]; then
-    usage
-fi
-
-PRP_FILE="$1"
+# Defaults
+MODEL="sonnet"
+THRESHOLD=90
+JSON_OUTPUT=false
+FIX_MODE=false
 VERBOSE=false
 
-if [[ "$2" == "--verbose" ]]; then
-    VERBOSE=true
-fi
-
-if [[ ! -f "$PRP_FILE" ]]; then
-    echo -e "${RED}ERROR: File not found: $PRP_FILE${NC}"
-    exit 1
-fi
-
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  PRP Quality Checker${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "Checking: ${CYAN}$PRP_FILE${NC}"
-echo ""
-
-# Read file content
-CONTENT=$(cat "$PRP_FILE")
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-check_section() {
-    local section_name="$1"
-    local pattern="$2"
-    local is_required="$3"
-
-    if echo "$CONTENT" | grep -qi "$pattern"; then
-        if [[ "$VERBOSE" == "true" ]]; then
-            echo -e "  ${GREEN}✓${NC} Section found: $section_name"
-        fi
-        return 0
-    else
-        if [[ "$is_required" == "required" ]]; then
-            echo -e "  ${RED}✗ MISSING REQUIRED:${NC} $section_name"
-            ((ERRORS++))
-            ((SCORE-=15))
-        else
-            echo -e "  ${YELLOW}⚠ Missing optional:${NC} $section_name"
-            ((WARNINGS++))
-            ((SCORE-=5))
-        fi
-        return 1
-    fi
-}
-
-check_quality() {
-    local check_name="$1"
-    local pattern="$2"
-    local inverse="$3"
-
-    if [[ "$inverse" == "inverse" ]]; then
-        # Check that pattern is NOT present
-        if echo "$CONTENT" | grep -qiE "$pattern"; then
-            echo -e "  ${YELLOW}⚠ WARNING:${NC} $check_name"
-            ((WARNINGS++))
-            ((SCORE-=3))
-            return 1
-        fi
-    else
-        # Check that pattern IS present
-        if ! echo "$CONTENT" | grep -qiE "$pattern"; then
-            echo -e "  ${YELLOW}⚠ WARNING:${NC} $check_name"
-            ((WARNINGS++))
-            ((SCORE-=3))
-            return 1
-        fi
-    fi
-    return 0
-}
-
-# ============================================================================
-# SECTION 1: Required Sections Check (Blocking)
-# ============================================================================
-
-echo -e "${BLUE}─── Required Sections ───${NC}"
-
-check_section "Success Criteria" "## .*Success Criteria" "required"
-check_section "Timeline with Validation Gates" "## .*Timeline\|Validation Gate" "required"
-check_section "Risk Assessment" "## .*Risk" "required"
-check_section "Resource Requirements" "## .*Resource" "required"
-check_section "Communication Plan" "## .*Communication" "required"
-
-# Additional required elements
-if ! echo "$CONTENT" | grep -qE "Validation Gate|GATE_.*_PASS|Gate [0-9]"; then
-    echo -e "  ${RED}✗ MISSING REQUIRED:${NC} Validation gates with pass/fail criteria"
-    ((ERRORS++))
-    ((SCORE-=10))
-fi
-
-echo ""
-
-# ============================================================================
-# SECTION 2: Quality Standards (Warnings)
-# ============================================================================
-
-echo -e "${BLUE}─── Quality Standards ───${NC}"
-
-# Check for measurable success criteria (not vague terms)
-VAGUE_METRICS="works well|good quality|performs well|efficient|intuitive|seamless|robust"
-if echo "$CONTENT" | grep -i "Success Criteria" -A 30 | grep -qiE "$VAGUE_METRICS"; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Success criteria contain vague terms"
-    echo -e "     ${CYAN}Fix: Use specific metrics (e.g., '<1% error rate' not 'works well')${NC}"
-    ((WARNINGS++))
-    ((SCORE-=5))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Success criteria are measurable"
-    fi
-fi
-
-# Check for specific dates (not vague timeline)
-VAGUE_TIMELINE="soon|later|eventually|when ready|as needed|TBD|TBA"
-if echo "$CONTENT" | grep -i "Timeline\|Phase\|Duration" -A 10 | grep -qiE "$VAGUE_TIMELINE"; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Timeline uses vague terms"
-    echo -e "     ${CYAN}Fix: Use specific durations ('2 weeks') or dates (YYYY-MM-DD)${NC}"
-    ((WARNINGS++))
-    ((SCORE-=5))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Timeline has specific dates/durations"
-    fi
-fi
-
-# Check that risks have mitigation plans
-RISK_COUNT=$(echo "$CONTENT" | grep -c "| Risk |" 2>/dev/null || true)
-RISK_COUNT=${RISK_COUNT:-0}
-MITIGATION_COUNT=$(echo "$CONTENT" | grep -ciE "mitigation|fallback|if.*then" 2>/dev/null || true)
-MITIGATION_COUNT=${MITIGATION_COUNT:-0}
-if [[ "$RISK_COUNT" -gt 0 ]] 2>/dev/null && [[ "$MITIGATION_COUNT" -lt 1 ]] 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Risks listed but no mitigation plans found"
-    echo -e "     ${CYAN}Fix: Add mitigation strategy for each identified risk${NC}"
-    ((WARNINGS++))
-    ((SCORE-=5))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Risks have mitigation plans"
-    fi
-fi
-
-# Check validation gates have pass/fail criteria
-GATE_COUNT=$(echo "$CONTENT" | grep -ciE "Validation Gate|Gate [0-9]" 2>/dev/null || true)
-GATE_COUNT=${GATE_COUNT:-0}
-PASS_CRITERIA=$(echo "$CONTENT" | grep -ciE "GATE.*PASS|Pass Condition|pass/fail" 2>/dev/null || true)
-PASS_CRITERIA=${PASS_CRITERIA:-0}
-if [[ "$GATE_COUNT" -gt 0 ]] 2>/dev/null && [[ "$PASS_CRITERIA" -lt 1 ]] 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Validation gates lack explicit pass/fail criteria"
-    echo -e "     ${CYAN}Fix: Add 'GATE_X_PASS := condition' for each gate${NC}"
-    ((WARNINGS++))
-    ((SCORE-=5))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Validation gates have pass/fail criteria"
-    fi
-fi
-
-# Check for unfilled placeholders
-PLACEHOLDER_COUNT=$(echo "$CONTENT" | grep -cE "\{\{[A-Z_]+\}\}|\[FILL.*\]|\[TODO\]|\[TBD\]" 2>/dev/null || true)
-PLACEHOLDER_COUNT=${PLACEHOLDER_COUNT:-0}
-PLACEHOLDER_COUNT=$(echo "$PLACEHOLDER_COUNT" | tr -d '\n' | head -c 10)
-if [[ "$PLACEHOLDER_COUNT" -gt 0 ]] 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Found $PLACEHOLDER_COUNT unfilled placeholders"
-    echo -e "     ${CYAN}Fix: Replace all {{VARIABLE}} and [FILL_THIS_IN] placeholders${NC}"
-    ((WARNINGS++))
-    ((SCORE-=3))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} No unfilled placeholders"
-    fi
-fi
-
-echo ""
-
-# ============================================================================
-# SECTION 3: Format Checks (Warnings)
-# ============================================================================
-
-echo -e "${BLUE}─── Format Checks ───${NC}"
-
-# Check for task checkboxes
-CHECKBOX_COUNT=$(echo "$CONTENT" | grep -cE "^[[:space:]]*- \[ \]" 2>/dev/null || true)
-CHECKBOX_COUNT=${CHECKBOX_COUNT:-0}
-if [[ "$CHECKBOX_COUNT" -lt 1 ]] 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} No task checkboxes found"
-    echo -e "     ${CYAN}Fix: Use '- [ ] Task name' format for deliverables${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Task checkboxes present ($CHECKBOX_COUNT found)"
-    fi
-fi
-
-# Check for table format in timeline/resources
-TABLE_COUNT=$(echo "$CONTENT" | grep -cE "^\|.*\|$" 2>/dev/null || true)
-TABLE_COUNT=${TABLE_COUNT:-0}
-if [[ "$TABLE_COUNT" -lt 3 ]] 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Few tables found - consider using tables for structured data"
-    echo -e "     ${CYAN}Fix: Use markdown tables for metrics, resources, timelines${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Tables used for structured data"
-    fi
-fi
-
-# Check for broken internal references
-BROKEN_REFS=$(echo "$CONTENT" | grep -oE "\[.*\]\(\)" | head -5)
-if [[ -n "$BROKEN_REFS" ]]; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Broken markdown links found"
-    echo -e "     ${CYAN}Found: $(echo "$BROKEN_REFS" | tr '\n' ' ')${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} No broken markdown links"
-    fi
-fi
-
-# Check for state transitions (good practice)
-if ! echo "$CONTENT" | grep -qE "→|STATE:|state:"; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} No state transition diagram found"
-    echo -e "     ${CYAN}Fix: Add state machine showing project flow${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} State transitions documented"
-    fi
-fi
-
-# Check for rollback/recovery procedures
-if ! echo "$CONTENT" | grep -qiE "rollback|recovery|fallback|if.*fails"; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} No rollback/recovery procedures documented"
-    echo -e "     ${CYAN}Fix: Document what happens if things go wrong${NC}"
-    ((WARNINGS++))
-    ((SCORE-=3))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Rollback/recovery procedures present"
-    fi
-fi
-
-echo ""
-
-# ============================================================================
-# SECTION 4: Validation Commands Check
-# ============================================================================
-
-echo -e "${BLUE}─── Validation Commands ───${NC}"
-
-# Check for validation commands section
-if ! echo "$CONTENT" | grep -qiE "## [0-9]*\.? *Validation Commands"; then
-    echo -e "  ${RED}✗ MISSING REQUIRED:${NC} Validation Commands section"
-    echo -e "     ${CYAN}Fix: Add '## Validation Commands' section with bash commands${NC}"
-    ((ERRORS++))
-    ((SCORE-=10))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Validation Commands section found"
-    fi
-
-    # Check for actual bash code blocks in validation section
-    VALIDATION_SECTION=$(echo "$CONTENT" | sed -n '/## [0-9]*\.* *Validation Commands/,/^## [0-9]/p')
-    BASH_BLOCKS=$(echo "$VALIDATION_SECTION" | grep -c '```bash' 2>/dev/null || true)
-    BASH_BLOCKS=${BASH_BLOCKS:-0}
-
-    if [[ "$BASH_BLOCKS" -lt 1 ]]; then
-        echo -e "  ${YELLOW}⚠ WARNING:${NC} No bash code blocks in Validation Commands"
-        echo -e "     ${CYAN}Fix: Add actual bash commands, not just descriptions${NC}"
-        ((WARNINGS++))
-        ((SCORE-=5))
-    elif [[ "$BASH_BLOCKS" -lt 3 ]]; then
-        echo -e "  ${YELLOW}⚠ WARNING:${NC} Only $BASH_BLOCKS bash blocks - recommend at least 3"
-        echo -e "     ${CYAN}Fix: Include tests, linting, and integration checks${NC}"
-        ((WARNINGS++))
-        ((SCORE-=3))
-    else
-        if [[ "$VERBOSE" == "true" ]]; then
-            echo -e "  ${GREEN}✓${NC} Validation commands include $BASH_BLOCKS bash blocks"
-        fi
-    fi
-
-    # Check for actual commands (not just placeholders)
-    PLACEHOLDER_CMDS=$(echo "$VALIDATION_SECTION" | grep -c "{{VALIDATION_" 2>/dev/null || true)
-    PLACEHOLDER_CMDS=${PLACEHOLDER_CMDS:-0}
-    if [[ "$PLACEHOLDER_CMDS" -gt 0 ]]; then
-        echo -e "  ${YELLOW}⚠ WARNING:${NC} $PLACEHOLDER_CMDS unfilled validation command placeholders"
-        echo -e "     ${CYAN}Fix: Replace {{VALIDATION_*}} with actual commands${NC}"
-        ((WARNINGS++))
-        ((SCORE-=3))
-    else
-        if [[ "$VERBOSE" == "true" ]]; then
-            echo -e "  ${GREEN}✓${NC} No unfilled validation placeholders"
-        fi
-    fi
-fi
-
-echo ""
-
-# ============================================================================
-# SECTION 5: Additional Checks
-# ============================================================================
-
-echo -e "${BLUE}─── Additional Checks ───${NC}"
-
-# Check for meta section
-if ! echo "$CONTENT" | grep -qE "prp_id:|PRP_ID|source_spec:"; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Meta section incomplete or missing"
-    echo -e "     ${CYAN}Fix: Add prp_id, source_spec, validation_status${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Meta section present"
-    fi
-fi
-
-# Check for pre-execution checklist
-if ! echo "$CONTENT" | grep -qiE "pre-execution|pre-deployment|checklist"; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Pre-execution checklist missing"
-    echo -e "     ${CYAN}Fix: Add checklist to verify before starting${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Pre-execution checklist present"
-    fi
-fi
-
-# Check for owner assignments
-OWNER_COUNT=$(echo "$CONTENT" | grep -ciE "owner:|owner\s*\|" 2>/dev/null || true)
-OWNER_COUNT=${OWNER_COUNT:-0}
-if [[ "$OWNER_COUNT" -lt 3 ]] 2>/dev/null; then
-    echo -e "  ${YELLOW}⚠ WARNING:${NC} Few owner assignments found"
-    echo -e "     ${CYAN}Fix: Assign owners to phases, risks, and communications${NC}"
-    ((WARNINGS++))
-    ((SCORE-=2))
-else
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo -e "  ${GREEN}✓${NC} Owner assignments present"
-    fi
-fi
-
-echo ""
-
-# ============================================================================
-# Summary
-# ============================================================================
-
-# Clamp score to 0-100
-if [[ $SCORE -lt 0 ]]; then
-    SCORE=0
-fi
-if [[ $SCORE -gt 100 ]]; then
-    SCORE=100
-fi
-
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Summary${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
-echo ""
-
-if [[ $ERRORS -gt 0 ]]; then
-    echo -e "${RED}❌ ERRORS: $ERRORS (blocking issues)${NC}"
-fi
-
-if [[ $WARNINGS -gt 0 ]]; then
-    echo -e "${YELLOW}⚠️  WARNINGS: $WARNINGS${NC}"
-fi
-
-echo ""
-
-# Color score based on value
-if [[ $SCORE -ge 90 ]]; then
-    SCORE_COLOR=$GREEN
-elif [[ $SCORE -ge 70 ]]; then
-    SCORE_COLOR=$YELLOW
-else
-    SCORE_COLOR=$RED
-fi
-
-echo -e "PRP Quality Score: ${SCORE_COLOR}${SCORE}/100${NC}"
-echo ""
-
-# Final result
-if [[ $ERRORS -gt 0 ]]; then
-    echo -e "${RED}❌ PRP FAILED - Missing required sections${NC}"
+usage() {
+    echo "Usage: $0 <prp-file> [options]"
     echo ""
-    echo "Required sections that must be added:"
-    echo "  - Success criteria with measurable metrics"
-    echo "  - Timeline with validation gates"
-    echo "  - Risk assessment with mitigation plans"
-    echo "  - Resource requirements"
-    echo "  - Communication plan"
+    echo "LLM-powered PRP quality assessment with rubric-based scoring."
+    echo ""
+    echo "Options:"
+    echo "  --threshold <N>   Pass threshold 0-100 (default: 90)"
+    echo "  --model <model>   haiku (fast), sonnet (default), opus"
+    echo "  --json            Output JSON only"
+    echo "  --fix             Generate improved PRP with issues fixed"
+    echo "  --verbose         Show detailed assessment"
+    echo ""
+    echo "Examples:"
+    echo "  $0 PRPs/feature-prp.md"
+    echo "  $0 PRPs/feature-prp.md --threshold 95 --fix"
     exit 1
+}
+
+check_claude_cli() {
+    command -v claude &> /dev/null || { echo -e "${RED}ERROR: Claude CLI not found.${NC}" >&2; exit 1; }
+}
+
+call_claude() {
+    local prompt="$1"
+    local model="$2"
+    local model_flag=""
+    case "$model" in
+        "haiku") model_flag="--model claude-3-5-haiku-latest" ;;
+        "sonnet") model_flag="--model claude-sonnet-4-20250514" ;;
+        "opus") model_flag="--model claude-opus-4-20250514" ;;
+    esac
+    echo "$prompt" | claude $model_flag --print 2>/dev/null
+}
+
+# Parse arguments
+PRP_FILE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --threshold) THRESHOLD="$2"; shift 2 ;;
+        --model) MODEL="$2"; shift 2 ;;
+        --json) JSON_OUTPUT=true; shift ;;
+        --fix) FIX_MODE=true; shift ;;
+        --verbose) VERBOSE=true; shift ;;
+        --help|-h) usage ;;
+        --version) echo "prp-checker.sh version $VERSION"; exit 0 ;;
+        -*)
+            echo -e "${RED}Unknown option: $1${NC}"
+            usage
+            ;;
+        *)
+            [[ -z "$PRP_FILE" ]] && PRP_FILE="$1" || { echo -e "${RED}Unknown argument: $1${NC}"; usage; }
+            shift
+            ;;
+    esac
+done
+
+[[ -z "$PRP_FILE" ]] && { echo -e "${RED}ERROR: PRP file required${NC}"; usage; }
+[[ ! -f "$PRP_FILE" ]] && { echo -e "${RED}ERROR: PRP not found: $PRP_FILE${NC}"; exit 1; }
+
+check_claude_cli
+
+PRP_CONTENT=$(cat "$PRP_FILE")
+
+[[ "$JSON_OUTPUT" == "false" ]] && {
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║        LLM-Powered PRP Quality Checker v$VERSION                 ║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "PRP:       ${CYAN}$PRP_FILE${NC}"
+    echo -e "Threshold: ${CYAN}$THRESHOLD%${NC}"
+    echo -e "Model:     ${CYAN}$MODEL${NC}"
+    echo ""
+}
+
+# Build Rubric-Based Assessment prompt
+CHECK_PROMPT=$(cat << 'PROMPT_END'
+You are assessing the quality of a Product Requirements Prompt (PRP) using rubric-based scoring.
+
+## PRP Quality Dimensions
+
+Score each dimension 0-20 points:
+
+### 1. COMPLETENESS (0-20 points)
+- **20**: All sections present and thoroughly detailed
+- **15**: All required sections present, some could be expanded
+- **10**: Missing 1-2 sections or major gaps in content
+- **5**: Missing multiple required sections
+- **0**: Skeleton only, not usable
+
+Required sections: Meta, Overview, Success Criteria, Timeline with Gates, Risks, Resources, Validation Commands
+
+### 2. SPECIFICITY (0-20 points)
+- **20**: All metrics have numbers, no vague terms, concrete criteria
+- **15**: Most metrics specific, 1-2 vague terms
+- **10**: Mix of specific and vague, some placeholders
+- **5**: Mostly vague language, many placeholders
+- **0**: No specific metrics, all hand-wavy
+
+Check for: "properly", "efficiently", "good quality", "[FILL_IN]", "TBD"
+
+### 3. EXECUTABILITY (0-20 points)
+- **20**: Engineer could start immediately, all decisions made
+- **15**: Minor clarifications needed, mostly executable
+- **10**: Some ambiguity about approach or order
+- **5**: Significant decisions still needed
+- **0**: Cannot determine what to actually do
+
+Check: Clear phases, task breakdowns, validation commands that actually run
+
+### 4. TESTABILITY (0-20 points)
+- **20**: Every requirement has concrete pass/fail criteria
+- **15**: Most requirements testable, few subjective
+- **10**: Mix of testable and subjective criteria
+- **5**: Most criteria are subjective
+- **0**: No way to verify completion
+
+Check: Validation gates, success metrics, bash commands
+
+### 5. STRUCTURE (0-20 points)
+- **20**: Professional format, tables, checklists, state diagrams
+- **15**: Well-organized, uses markdown effectively
+- **10**: Readable but could be better organized
+- **5**: Hard to navigate, inconsistent formatting
+- **0**: Unstructured text dump
+
+Check: Markdown tables, checkboxes, headers, clear sections
+
+## Few-Shot Examples
+
+### Example: High Score (95+)
+```
+## Success Criteria
+- Response time: <200ms p95 (measured via DataDog APM)
+- Error rate: <0.1% over 24hr rolling window
+- User satisfaction: NPS ≥50 (measured in post-deploy survey)
+
+## Validation Gate 1
+GATE_1_PASS := unit_tests_pass AND coverage ≥ 80% AND lint_score = 0
+```
+**Score**: High specificity (numbers), high testability (clear pass/fail)
+
+### Example: Low Score (60-)
+```
+## Success Criteria
+- System should work properly
+- Users should be satisfied
+- Performance should be good
+
+## Timeline
+- Phase 1: Build stuff
+- Phase 2: Test and fix
+```
+**Score**: Low specificity (vague), low testability (how to measure?), low executability (what exactly to build?)
+
+### Example: Missing Section (Major Deduction)
+PRP has no Risk Assessment section
+**Score**: -15 from completeness, overall cap at 85
+
+## PRP to Assess
+
+{{PRP_CONTENT}}
+
+## Your Assessment
+
+1. Score each dimension independently
+2. Note specific issues with exact quotes
+3. **CRITICAL**: Distinguish between PRP-level issues (fixable in PRP) and SPEC-level issues (require source spec changes)
+4. Calculate total (sum of 5 dimensions, max 100)
+
+## Issue Classification
+
+**SPEC-LEVEL issues** (require going back to source spec):
+- Success criteria undefined in source → can't invent metrics
+- Scope boundaries unclear → can't determine what's in/out
+- User requirements missing → can't specify behavior
+- Technical constraints not stated → can't make architecture decisions
+
+**PRP-LEVEL issues** (fixable in PRP without spec changes):
+- Missing section that can be derived from existing spec content
+- Formatting/structure problems
+- Placeholders that have answers elsewhere in PRP
+- Validation commands not written but requirements are clear
+
+## Output Format
+
+```json
+{
+  "prp_file": "{{PRP_FILENAME}}",
+  "overall_score": <sum of dimensions, 0-100>,
+  "status": "<PASS if ≥threshold | NEEDS_WORK if 70-threshold | REJECTED if <70>",
+  "dimensions": {
+    "completeness": {"score": <0-20>, "notes": "<assessment>"},
+    "specificity": {"score": <0-20>, "notes": "<assessment>"},
+    "executability": {"score": <0-20>, "notes": "<assessment>"},
+    "testability": {"score": <0-20>, "notes": "<assessment>"},
+    "structure": {"score": <0-20>, "notes": "<assessment>"}
+  },
+  "issues": [
+    {
+      "dimension": "<which dimension>",
+      "severity": "<BLOCKER|MAJOR|MINOR>",
+      "location": "<section or quoted text>",
+      "problem": "<what's wrong>",
+      "fix": "<specific improvement>"
+    }
+  ],
+  "spec_issues": [
+    {
+      "severity": "<BLOCKER|MAJOR>",
+      "problem": "<what the source spec is missing>",
+      "spec_fix": "<what needs to be added to the source spec>",
+      "why_spec_level": "<why this can't be fixed in PRP alone>"
+    }
+  ],
+  "has_spec_issues": <true if spec_issues is non-empty, false otherwise>,
+  "missing_sections": ["<list any missing required sections>"],
+  "placeholder_count": <number of [FILL_IN] or {{}} found>,
+  "strengths": ["<what the PRP does well>"],
+  "summary": "<one sentence overall assessment>"
+}
+```
+PROMPT_END
+)
+
+CHECK_PROMPT="${CHECK_PROMPT//\{\{PRP_CONTENT\}\}/$PRP_CONTENT}"
+CHECK_PROMPT="${CHECK_PROMPT//\{\{PRP_FILENAME\}\}/$(basename "$PRP_FILE")}"
+
+[[ "$JSON_OUTPUT" == "false" ]] && echo -e "${BLUE}Assessing PRP quality...${NC}"
+
+RESULT=$(call_claude "$CHECK_PROMPT" "$MODEL")
+
+[[ "$VERBOSE" == "true" ]] && {
+    echo ""
+    echo -e "${MAGENTA}━━━ Full Assessment ━━━${NC}"
+    echo "$RESULT" | head -80
+    echo "..."
+    echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+# Extract JSON
+RESULT_JSON=$(echo "$RESULT" | sed -n '/```json/,/```/p' | sed '1d;$d')
+[[ -z "$RESULT_JSON" ]] && RESULT_JSON=$(echo "$RESULT" | grep -o '{.*}' | tail -1)
+
+# Parse results
+SCORE=$(echo "$RESULT_JSON" | grep -o '"overall_score":\s*[0-9]*' | grep -o '[0-9]*' | head -1)
+STATUS=$(echo "$RESULT_JSON" | grep -o '"status":\s*"[^"]*"' | cut -d'"' -f4)
+SUMMARY=$(echo "$RESULT_JSON" | grep -o '"summary":\s*"[^"]*"' | cut -d'"' -f4)
+PLACEHOLDERS=$(echo "$RESULT_JSON" | grep -o '"placeholder_count":\s*[0-9]*' | grep -o '[0-9]*' | head -1)
+HAS_SPEC_ISSUES=$(echo "$RESULT_JSON" | grep -o '"has_spec_issues":\s*true' | head -1)
+
+[[ -z "$SCORE" ]] && SCORE=0
+[[ -z "$STATUS" ]] && STATUS="UNKNOWN"
+[[ -z "$PLACEHOLDERS" ]] && PLACEHOLDERS=0
+[[ -n "$HAS_SPEC_ISSUES" ]] && HAS_SPEC_ISSUES="true" || HAS_SPEC_ISSUES="false"
+
+PASSED=false
+[[ $SCORE -ge $THRESHOLD ]] && PASSED=true
+
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    echo "$RESULT_JSON" | sed 's/}$/,"threshold":'"$THRESHOLD"',"passed":'"$PASSED"',"has_spec_issues":'"$HAS_SPEC_ISSUES"'}/'
 else
-    if [[ $WARNINGS -gt 0 ]]; then
-        echo -e "${GREEN}✅ PRP PASSED${NC} (with $WARNINGS warnings)"
-        echo ""
-        echo "Consider addressing warnings to improve quality."
+    echo ""
+
+    # Display dimension scores
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "  ${CYAN}Dimension Scores${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    echo "$RESULT_JSON" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    dims = data.get('dimensions', {})
+    for name, info in dims.items():
+        score = info.get('score', 0)
+        max_score = 20
+        bar_len = int(score / max_score * 20)
+        bar = '█' * bar_len + '░' * (20 - bar_len)
+        color = '\033[0;32m' if score >= 16 else '\033[1;33m' if score >= 12 else '\033[0;31m'
+        reset = '\033[0m'
+        print(f\"  {name.upper():15} {color}{bar} {score:2}/20{reset}\")
+except Exception as e:
+    print(f'Parse error: {e}')
+" 2>/dev/null
+
+    echo ""
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+
+    if [[ $SCORE -ge $THRESHOLD ]]; then
+        echo -e "  Overall Score: ${GREEN}$SCORE/100${NC} (threshold: $THRESHOLD)"
+        echo -e "  Status:        ${GREEN}PASS${NC}"
+    elif [[ $SCORE -ge 70 ]]; then
+        echo -e "  Overall Score: ${YELLOW}$SCORE/100${NC} (threshold: $THRESHOLD)"
+        echo -e "  Status:        ${YELLOW}NEEDS WORK${NC}"
     else
-        echo -e "${GREEN}✅ PRP PASSED - Excellent quality!${NC}"
+        echo -e "  Overall Score: ${RED}$SCORE/100${NC} (threshold: $THRESHOLD)"
+        echo -e "  Status:        ${RED}REJECTED${NC}"
     fi
-    exit 0
+
+    [[ $PLACEHOLDERS -gt 0 ]] && echo -e "  Placeholders:  ${YELLOW}$PLACEHOLDERS unfilled${NC}"
+
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    [[ -n "$SUMMARY" ]] && echo -e "${CYAN}Summary:${NC} $SUMMARY"
+    echo ""
+
+    # Show spec-level issues first (these block PRP fixes)
+    if [[ "$HAS_SPEC_ISSUES" == "true" ]]; then
+        echo -e "${RED}╔═══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║  SPEC-LEVEL ISSUES DETECTED (require source spec changes)     ║${NC}"
+        echo -e "${RED}╚═══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo "$RESULT_JSON" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    for i, issue in enumerate(data.get('spec_issues', []), 1):
+        sev = issue.get('severity', 'MAJOR')
+        print(f\"\033[0;31m{i}. [{sev}] {issue.get('problem', 'N/A')}\033[0m\")
+        print(f\"   Spec fix: {issue.get('spec_fix', 'N/A')}\")
+        print(f\"   Why spec-level: {issue.get('why_spec_level', 'N/A')}\")
+        print()
+except:
+    pass
+" 2>/dev/null
+        echo -e "${YELLOW}⚠ These issues cannot be fixed in the PRP - source spec must be updated${NC}"
+        echo ""
+    fi
+
+    # Show PRP-level issues
+    ISSUE_COUNT=$(echo "$RESULT_JSON" | grep -o '"severity"' | wc -l | tr -d ' ')
+    if [[ $ISSUE_COUNT -gt 0 ]]; then
+        echo -e "${BLUE}Issues to Address:${NC}"
+        echo "$RESULT_JSON" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    for i, issue in enumerate(data.get('issues', [])[:5], 1):
+        sev = issue.get('severity', 'UNKNOWN')
+        color = '\033[0;31m' if sev == 'BLOCKER' else '\033[1;33m' if sev == 'MAJOR' else '\033[0m'
+        reset = '\033[0m'
+        print(f\"{color}{i}. [{sev}] {issue.get('dimension', 'General')}{reset}\")
+        print(f\"   Problem: {issue.get('problem', 'N/A')}\")
+        print(f\"   Fix: {issue.get('fix', 'N/A')}\")
+        print()
+except:
+    pass
+" 2>/dev/null
+        echo ""
+    fi
+
+    # Show strengths
+    STRENGTHS=$(echo "$RESULT_JSON" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    for s in data.get('strengths', [])[:3]:
+        print(f'  + {s}')
+except:
+    pass
+" 2>/dev/null)
+    if [[ -n "$STRENGTHS" ]]; then
+        echo -e "${GREEN}Strengths:${NC}"
+        echo "$STRENGTHS"
+        echo ""
+    fi
+
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+
+    # Generate improved PRP if requested
+    if [[ "$FIX_MODE" == "true" ]] && [[ $SCORE -lt $THRESHOLD ]]; then
+        echo ""
+        echo -e "${BLUE}Generating improved PRP...${NC}"
+
+        IMPROVE_PROMPT=$(cat << 'IMPROVE_END'
+You are improving a PRP to fix the identified PRP-LEVEL quality issues.
+
+## Current PRP
+{{PRP_CONTENT}}
+
+## Quality Assessment
+{{ASSESSMENT_JSON}}
+
+## Instructions
+1. Fix ONLY the PRP-level issues in the "issues" array
+2. DO NOT attempt to fix spec-level issues (in "spec_issues" array) - those require source spec changes
+3. Keep the same overall structure
+4. Replace vague terms with specific metrics WHERE the spec provides enough context
+5. Fill in placeholders ONLY if the answer exists elsewhere in the PRP
+6. Add missing sections if they can be derived from existing content
+7. Ensure all validation gates have concrete pass/fail criteria
+
+## Critical Rule
+If a problem stems from missing information in the source spec (marked as spec_issues),
+leave a clear placeholder like "[SPEC: needs success metric definition]" rather than
+inventing values. This signals the spec needs updating.
+
+Output the COMPLETE improved PRP in markdown:
+IMPROVE_END
+)
+        IMPROVE_PROMPT="${IMPROVE_PROMPT//\{\{PRP_CONTENT\}\}/$PRP_CONTENT}"
+        IMPROVE_PROMPT="${IMPROVE_PROMPT//\{\{ASSESSMENT_JSON\}\}/$RESULT_JSON}"
+
+        IMPROVED_PRP=$(call_claude "$IMPROVE_PROMPT" "sonnet")
+        IMPROVED_PRP=$(echo "$IMPROVED_PRP" | sed '/^```markdown$/d' | sed '/^```$/d')
+
+        IMPROVED_FILE="${PRP_FILE%.md}-improved.md"
+        echo "$IMPROVED_PRP" > "$IMPROVED_FILE"
+
+        echo -e "${GREEN}   ✓ Improved PRP saved to: $IMPROVED_FILE${NC}"
+        echo ""
+
+        ORIG_LINES=$(wc -l < "$PRP_FILE" | tr -d ' ')
+        IMPROVED_LINES=$(wc -l < "$IMPROVED_FILE" | tr -d ' ')
+        echo -e "   Original: ${CYAN}$ORIG_LINES lines${NC}"
+        echo -e "   Improved: ${CYAN}$IMPROVED_LINES lines${NC}"
+        echo ""
+        echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    fi
 fi
+
+[[ "$PASSED" == "true" ]] && exit 0 || exit 1
