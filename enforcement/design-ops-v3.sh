@@ -31,7 +31,8 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # PRP Generation Configuration
-DESIGN_OPS_BASE="${DESIGN_OPS_BASE:-$HOME/.claude/plugins/design-ops}"
+# Auto-detect base from script location (works for anyone cloning the repo)
+DESIGN_OPS_BASE="${DESIGN_OPS_BASE:-$(dirname "$SCRIPT_DIR")}"
 INVARIANTS_DIR="$DESIGN_OPS_BASE"
 DOMAINS_DIR="$DESIGN_OPS_BASE/domains"
 TEMPLATES_DIR="$DESIGN_OPS_BASE/templates"
