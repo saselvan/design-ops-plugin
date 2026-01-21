@@ -454,30 +454,63 @@ get_llm_assessment() {
     echo -e "${BLUE}━━━ LLM Advisory Assessment ━━━${NC}"
     echo -e "${CYAN}Getting suggestions (not auto-fixing)...${NC}"
 
-    # JSON schema for structured output - no grades, just suggestions
-    local schema='{"type":"object","properties":{"summary":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"}},"strengths":{"type":"array","items":{"type":"string"}}},"required":["summary","suggestions"]}'
-
-    local prompt
+    local schema prompt
     if [[ "$type" == "spec" ]]; then
-        prompt="Review this specification and provide feedback. Be concise and actionable.
+        # Schema for spec validation - focuses on ambiguity/clarity
+        schema='{"type":"object","properties":{"summary":{"type":"string"},"ambiguity_flags":{"type":"array","items":{"type":"string"}},"implicit_assumptions":{"type":"array","items":{"type":"string"}},"suggestions":{"type":"array","items":{"type":"string"}},"strengths":{"type":"array","items":{"type":"string"}}},"required":["summary","ambiguity_flags","suggestions"]}'
+
+        prompt="You are validating a specification for CLARITY and UNAMBIGUITY (not completeness - that was checked in stress-test).
+
+CLARITY INVARIANT (Invariant #1): Every term must have operational definition.
+Flag any of these vague terms WITHOUT objective criteria attached:
+- 'properly', 'correctly', 'efficiently', 'quickly'
+- 'good', 'quality', 'robust', 'secure'
+- 'intuitive', 'user-friendly', 'easy to use'
+- 'as needed', 'appropriate', 'reasonable'
+- 'should', 'may', 'might' (without clear conditions)
 
 SPECIFICATION:
 $content
 
+Check for:
+1. Vague terms without measurable definitions (quote the exact text)
+2. Implicit assumptions not stated explicitly
+3. Ambiguous state transitions (what happens between states?)
+4. Success criteria that can't be objectively measured
+5. Missing edge case definitions
+
 Provide:
-- summary: One sentence describing what this spec covers
-- suggestions: 2-5 specific actionable improvements (things to consider, not mandates)
-- strengths: 1-2 things done well"
+- summary: One sentence on clarity level
+- ambiguity_flags: Specific vague terms found and where (quote the text, e.g., 'Line says \"handle errors properly\" - what does properly mean?') - max 5
+- implicit_assumptions: Things the spec assumes but doesn't state explicitly - max 3
+- suggestions: How to make unclear sections more specific - max 5
+- strengths: What's already clear and well-defined - max 2
+
+If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It's better to express uncertainty than to guess."
     else
-        prompt="Review this PRP (Product Requirements Prompt) and provide feedback. Be concise and actionable.
+        # Schema for PRP validation - focuses on implementation readiness
+        schema='{"type":"object","properties":{"summary":{"type":"string"},"blockers":{"type":"array","items":{"type":"string"}},"confidence_assessment":{"type":"string"},"missing_detail":{"type":"array","items":{"type":"string"}},"strengths":{"type":"array","items":{"type":"string"}}},"required":["summary","blockers"]}'
+
+        prompt="You are validating a PRP (Product Requirements Prompt) for implementation readiness.
 
 PRP:
 $content
 
+Check:
+1. CONFIDENCE SCORE SANITY: Does the stated confidence (X/10) seem accurate given the content?
+2. EXTRACTION COMPLETENESS: Are there sections marked NOT_SPECIFIED_IN_SPEC that seem wrong?
+3. THINKING LEVEL: Does the recommended thinking level match the complexity?
+4. APPENDIX CONTENT: Are technical details (schemas, APIs, wireframes) present if the PRP mentions them?
+5. ACTIONABILITY: Could an engineer start implementation immediately, or are there blockers?
+
 Provide:
-- summary: One sentence describing what this PRP covers
-- suggestions: 2-5 specific actionable improvements (things to consider, not mandates)
-- strengths: 1-2 things done well"
+- summary: One sentence on implementation readiness
+- blockers: Issues that MUST be resolved before implementation (max 3)
+- confidence_assessment: Is the stated confidence score accurate? Why/why not?
+- missing_detail: Technical content that seems missing despite being referenced - max 3
+- strengths: What makes this PRP implementation-ready - max 2
+
+If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It's better to express uncertainty than to guess."
     fi
 
     local raw_result result
@@ -502,22 +535,92 @@ Provide:
     echo -e "Summary: $summary"
     echo ""
 
-    echo -e "${YELLOW}Suggestions (for you to consider):${NC}"
-    echo "$result" | python3 -c "
+    if [[ "$type" == "spec" ]]; then
+        # Display spec validation results (ambiguity-focused)
+        echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
-    for i, s in enumerate(data.get('suggestions', [])[:5], 1):
-        print(f'  {i}. {s}')
+
+    # Ambiguity flags (Invariant #1)
+    flags = data.get('ambiguity_flags', [])
+    if flags:
+        print('\033[91mAmbiguity Flags (Invariant #1):\033[0m')
+        for f in flags[:5]:
+            print(f'  ✗ {f}')
+        print()
+    else:
+        print('\033[92mNo ambiguity flags - terminology is clear\033[0m')
+        print()
+
+    # Implicit assumptions
+    assumptions = data.get('implicit_assumptions', [])
+    if assumptions:
+        print('\033[93mImplicit Assumptions:\033[0m')
+        for a in assumptions[:3]:
+            print(f'  ? {a}')
+        print()
+
+    # Suggestions
+    suggestions = data.get('suggestions', [])
+    if suggestions:
+        print('\033[93mSuggestions:\033[0m')
+        for i, s in enumerate(suggestions[:5], 1):
+            print(f'  {i}. {s}')
+        print()
+
+    # Strengths
     strengths = data.get('strengths', [])
     if strengths:
-        print()
         print('Strengths:')
-        for s in strengths[:3]:
+        for s in strengths[:2]:
             print(f'  ✓ {s}')
 except Exception as e:
     print(f'  (Could not parse: {e})')
 " 2>/dev/null
+    else
+        # Display PRP validation results (implementation-readiness focused)
+        echo "$result" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+
+    # Blockers
+    blockers = data.get('blockers', [])
+    if blockers:
+        print('\033[91mBlockers (must resolve):\033[0m')
+        for b in blockers[:3]:
+            print(f'  ✗ {b}')
+        print()
+    else:
+        print('\033[92mNo blockers - ready for implementation\033[0m')
+        print()
+
+    # Confidence assessment
+    conf = data.get('confidence_assessment', '')
+    if conf:
+        print('\033[96mConfidence Assessment:\033[0m')
+        print(f'  {conf}')
+        print()
+
+    # Missing detail
+    missing = data.get('missing_detail', [])
+    if missing:
+        print('\033[93mMissing Detail:\033[0m')
+        for m in missing[:3]:
+            print(f'  ? {m}')
+        print()
+
+    # Strengths
+    strengths = data.get('strengths', [])
+    if strengths:
+        print('Strengths:')
+        for s in strengths[:2]:
+            print(f'  ✓ {s}')
+except Exception as e:
+    print(f'  (Could not parse: {e})')
+" 2>/dev/null
+    fi
 
     echo ""
     echo "DONE"  # Signal completion, not a grade
