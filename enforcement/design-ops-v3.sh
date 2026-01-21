@@ -40,6 +40,99 @@ TEMPLATES_DIR="$DESIGN_OPS_BASE/templates"
 # Options: claude-sonnet-4-20250514, claude-opus-4-20250514, etc.
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
 
+# Pipeline state directory (stores inter-command state)
+PIPELINE_STATE_DIR="${PIPELINE_STATE_DIR:-$HOME/.design-ops-state}"
+
+# =============================================================================
+# PIPELINE STATE MANAGEMENT (continuity between commands)
+# =============================================================================
+
+# Get state file path for a spec
+get_state_file_path() {
+    local spec_file="$1"
+    local spec_basename
+    spec_basename=$(basename "$spec_file" .md)
+    mkdir -p "$PIPELINE_STATE_DIR"
+    echo "$PIPELINE_STATE_DIR/${spec_basename}.state.json"
+}
+
+# Read pipeline state (returns empty JSON object if no state)
+read_pipeline_state() {
+    local state_file="$1"
+    if [[ -f "$state_file" ]]; then
+        cat "$state_file"
+    else
+        echo '{}'
+    fi
+}
+
+# Write pipeline state
+write_pipeline_state() {
+    local state_file="$1"
+    local state_json="$2"
+    echo "$state_json" > "$state_file"
+}
+
+# Update pipeline state with new command findings
+# Usage: update_pipeline_state "$state_file" "stress-test" "$findings_json"
+update_pipeline_state() {
+    local state_file="$1"
+    local command="$2"
+    local findings="$3"
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    local current_state
+    current_state=$(read_pipeline_state "$state_file")
+
+    # Use python for JSON manipulation (more reliable than jq dependency)
+    local new_state
+    new_state=$(python3 -c "
+import json
+import sys
+
+current = json.loads('''$current_state''')
+findings = json.loads('''$findings''')
+
+current['$command'] = {
+    'timestamp': '$timestamp',
+    'findings': findings
+}
+current['last_updated'] = '$timestamp'
+current['last_command'] = '$command'
+
+print(json.dumps(current, indent=2))
+" 2>/dev/null)
+
+    if [[ -n "$new_state" ]]; then
+        write_pipeline_state "$state_file" "$new_state"
+    fi
+}
+
+# Get accumulated issues count from state (affects confidence)
+get_accumulated_issues() {
+    local state_file="$1"
+    local state
+    state=$(read_pipeline_state "$state_file")
+
+    python3 -c "
+import json
+state = json.loads('''$state''')
+issues = 0
+
+# Count stress-test issues
+st = state.get('stress-test', {}).get('findings', {})
+issues += len(st.get('invariant_violations', []))
+issues += len(st.get('critical_blockers', []))
+
+# Count validate issues
+v = state.get('validate', {}).get('findings', {})
+issues += len(v.get('ambiguity_flags', []))
+
+print(issues)
+" 2>/dev/null || echo "0"
+}
+
 # Domain mapping function (bash 3.x compatible)
 # Returns: file:start-end or empty if not found
 get_domain_mapping() {
@@ -658,6 +751,7 @@ except Exception as e:
 
     echo ""
     echo "DONE"  # Signal completion, not a grade
+    echo "STATE_JSON:$result"  # For pipeline state capture
 }
 
 # =============================================================================
@@ -919,7 +1013,23 @@ generate_prp() {
     edge_score=$(echo "$confidence_info" | grep "EDGE_SCORE=" | cut -d= -f2)
     tech_score=$(echo "$confidence_info" | grep "TECH_SCORE=" | cut -d= -f2)
 
-    echo -e "  Confidence: $confidence_score/10"
+    # Check pipeline state for accumulated issues (affects confidence)
+    local state_file
+    state_file=$(get_state_file_path "$spec_file")
+    local accumulated_issues
+    accumulated_issues=$(get_accumulated_issues "$state_file")
+
+    if [[ "$accumulated_issues" -gt 0 ]]; then
+        # Reduce confidence by 0.5 per accumulated issue (max 2 points reduction)
+        local penalty
+        penalty=$(echo "scale=1; $accumulated_issues * 0.5" | bc)
+        [[ $(echo "$penalty > 2" | bc) -eq 1 ]] && penalty=2
+        confidence_score=$(echo "scale=1; $confidence_score - $penalty" | bc)
+        [[ $(echo "$confidence_score < 1" | bc) -eq 1 ]] && confidence_score=1
+        echo -e "  Confidence: $confidence_score/10 ${YELLOW}(adjusted: -$penalty from $accumulated_issues prior issues)${NC}"
+    else
+        echo -e "  Confidence: $confidence_score/10"
+    fi
 
     # Step 3: Determine thinking level
     local thinking_info
@@ -1181,6 +1291,13 @@ cmd_stress_test() {
     [[ -n "$requirements_file" ]] && [[ -f "$requirements_file" ]] && requirements_content=$(cat "$requirements_file")
     [[ -n "$journeys_file" ]] && [[ -f "$journeys_file" ]] && journeys_content=$(cat "$journeys_file")
 
+    # Get pipeline state file for this spec
+    local state_file
+    state_file=$(get_state_file_path "$spec_file")
+
+    # Variable to store LLM result for state saving
+    local llm_result="{}"
+
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║  SPEC STRESS TEST (v$VERSION) - Completeness Check              ║${NC}"
@@ -1346,6 +1463,9 @@ If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It'
 
         track_cost "$prompt" "$result"
 
+        # Store result for pipeline state
+        [[ -n "$result" && "$result" != "{}" ]] && llm_result="$result"
+
         if [[ -n "$result" && "$result" != "{}" ]]; then
             local summary
             summary=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('summary',''))" 2>/dev/null)
@@ -1453,6 +1573,10 @@ except:
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
     [[ "$quick" != "true" ]] && show_cost_summary
+
+    # Save findings to pipeline state
+    update_pipeline_state "$state_file" "stress-test" "$llm_result"
+    echo -e "  ${DIM}State saved: $state_file${NC}"
     echo ""
 }
 
@@ -1464,6 +1588,13 @@ cmd_validate() {
 
     local content
     content=$(cat "$file")
+
+    # Get pipeline state file for this spec
+    local state_file
+    state_file=$(get_state_file_path "$file")
+
+    # Variable to store LLM result for state saving
+    local llm_result="{}"
 
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
@@ -1495,8 +1626,10 @@ cmd_validate() {
         echo ""
         local llm_output
         llm_output=$(get_llm_assessment "$file" "spec")
-        echo "$llm_output" | sed '$d'
-        llm_grade=$(echo "$llm_output" | tail -1)
+        # Extract STATE_JSON from last line, display rest
+        llm_result=$(echo "$llm_output" | grep "^STATE_JSON:" | sed 's/^STATE_JSON://')
+        echo "$llm_output" | grep -v "^STATE_JSON:" | sed '$d'
+        llm_grade=$(echo "$llm_output" | grep -v "^STATE_JSON:" | tail -1)
     fi
 
     # ━━━ Summary ━━━
@@ -1530,6 +1663,9 @@ cmd_validate() {
     # Require human acknowledgment before proceeding
     require_review_acknowledgment "validate" "$file"
 
+    # Save findings to pipeline state
+    update_pipeline_state "$state_file" "validate" "$llm_result"
+    echo -e "  ${DIM}State saved: $state_file${NC}"
     echo ""
 }
 
