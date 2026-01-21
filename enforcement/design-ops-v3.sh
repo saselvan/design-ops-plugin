@@ -431,7 +431,8 @@ Before responding:
 $prompt"
     fi
 
-    result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print 2>/dev/null)
+    # Pass prompt as argument (piping hangs in some environments)
+    result=$(claude --model "$CLAUDE_MODEL" -p "$prompt" 2>/dev/null)
 
     track_cost "$prompt" "$result"
     echo "$result"
@@ -2424,7 +2425,8 @@ Skip other phases."
 
     # Call Claude
     local result
-    result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print 2>/dev/null)
+    # Pass prompt as argument (piping hangs in some environments)
+    result=$(claude --model "$CLAUDE_MODEL" -p "$prompt" 2>/dev/null)
 
     track_cost "$prompt" "$result"
 
