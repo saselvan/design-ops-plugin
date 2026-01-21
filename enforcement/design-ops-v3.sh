@@ -1388,12 +1388,26 @@ cmd_validate() {
 
     [[ ! -f "$file" ]] && { echo -e "${RED}File not found: $file${NC}"; exit 1; }
 
+    local content
+    content=$(cat "$file")
+
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║  SPEC VALIDATION (v$VERSION)                                    ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "File: ${CYAN}$file${NC}"
+
+    # ━━━ Domain Detection ━━━
+    local domain_result
+    domain_result=$(resolve_domain_invariants "$content")
+
+    local invariant_refs total_invariants domain_count
+    invariant_refs=$(echo "$domain_result" | sed -n '/^INVARIANT_REFS<<EOF$/,/^EOF$/p' | sed '1d;$d')
+    total_invariants=$(echo "$domain_result" | grep "^TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_result" | grep "^DOMAIN_COUNT=" | cut -d= -f2)
+
+    echo -e "  Domains: ${CYAN}$((domain_count + 1))${NC} | Invariants: ${CYAN}$total_invariants${NC}"
     echo ""
 
     # Deterministic checks (always run)
@@ -1487,12 +1501,25 @@ cmd_check() {
 
     [[ ! -f "$file" ]] && { echo -e "${RED}File not found: $file${NC}"; exit 1; }
 
+    local content
+    content=$(cat "$file")
+
     echo ""
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║  PRP QUALITY CHECK (v$VERSION)                                  ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "File: ${CYAN}$file${NC}"
+
+    # ━━━ Domain Detection (from PRP content) ━━━
+    local domain_result
+    domain_result=$(resolve_domain_invariants "$content")
+
+    local total_invariants domain_count
+    total_invariants=$(echo "$domain_result" | grep "^TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_result" | grep "^DOMAIN_COUNT=" | cut -d= -f2)
+
+    echo -e "  Domains: ${CYAN}$((domain_count + 1))${NC} | Invariants: ${CYAN}$total_invariants${NC}"
     echo ""
 
     local struct_output struct_grade
