@@ -173,6 +173,7 @@ usage() {
     echo "  validate <spec>      Check clarity (structure, ambiguity)"
     echo "  generate <spec>      Generate PRP from spec (one-shot)"
     echo "  check <prp>          Check PRP quality"
+    echo "  implement <prp>      Generate Ralph steps from PRP (--output <dir> --phase N)"
     echo "  ralph-check <prp>    Validate implementation against PRP (--steps <dir>)"
     echo ""
     echo "ADVANCED COMMANDS (extended features):"
@@ -182,6 +183,9 @@ usage() {
     echo "  retro <prp>          Retrospective analysis after implementation"
     echo ""
     echo "OPTIONS:"
+    echo "  --output <dir>       Output directory for implement command"
+    echo "  --phase <N>          Generate only phase N (for implement command)"
+    echo "  --steps <dir>        Steps directory for ralph-check"
     echo "  --requirements <f>   Requirements file for stress-test (optional)"
     echo "  --journeys <f>       User journeys file for stress-test (optional)"
     echo "  --quick              Skip LLM assessment (deterministic only)"
@@ -192,7 +196,9 @@ usage() {
     echo "  1. stress-test  →  Catch obvious gaps in completeness"
     echo "  2. validate     →  Catch obvious gaps in clarity → HUMAN REVIEW GATE"
     echo "  3. generate     →  Create PRP + auto-check → HUMAN REVIEW GATE"
-    echo "  4. implement    →  YOU build it"
+    echo "  4. implement    →  Generate Ralph steps from PRP"
+    echo "  5. ralph-check  →  Verify steps match PRP → HUMAN REVIEW GATE"
+    echo "  6. Execute      →  ./ralph.sh N to run steps"
     echo ""
     echo "Run '$0 <command> --help' for command-specific help."
     echo ""
@@ -2009,6 +2015,174 @@ check_ralph_deterministic() {
         warnings+=("No validation rules found in PRP")
     fi
 
+    # 5. Step header format checks (2026 best practices)
+    echo ""
+    echo -e "${CYAN}Checking step header format...${NC}"
+
+    for step in "$steps_dir"/step-*.sh 2>/dev/null; do
+        [[ ! -f "$step" ]] && continue
+        local step_name
+        step_name=$(basename "$step")
+
+        # Check for invariant references
+        if ! grep -q "Invariants Applied:" "$step"; then
+            issues+=("$step_name: Missing 'Invariants Applied:' section in header")
+        else
+            echo -e "  ${GREEN}✓${NC} $step_name: Has invariant references"
+        fi
+
+        # Check for thinking level
+        if ! grep -q "Thinking Level:" "$step"; then
+            warnings+=("$step_name: Missing 'Thinking Level:' in header")
+        fi
+
+        # Check for confidence
+        if ! grep -q "Confidence:" "$step"; then
+            warnings+=("$step_name: Missing 'Confidence:' in header")
+        fi
+
+        # Check for PRP hash
+        if ! grep -q "PRP Hash:" "$step"; then
+            warnings+=("$step_name: Missing 'PRP Hash:' for traceability")
+        fi
+
+        # Check for OBJECTIVE section
+        if ! grep -q "=== OBJECTIVE" "$step"; then
+            warnings+=("$step_name: Missing '=== OBJECTIVE ===' section")
+        fi
+
+        # Check for ACCEPTANCE CRITERIA section
+        if ! grep -q "=== ACCEPTANCE CRITERIA" "$step"; then
+            warnings+=("$step_name: Missing '=== ACCEPTANCE CRITERIA ===' section")
+        fi
+    done
+
+    # 6. Test format checks
+    echo ""
+    echo -e "${CYAN}Checking test format...${NC}"
+
+    for test in "$steps_dir"/test-*.sh 2>/dev/null; do
+        [[ ! -f "$test" ]] && continue
+        local test_name
+        test_name=$(basename "$test")
+
+        # Check for PRP SUCCESS CRITERIA section
+        if ! grep -q "=== PRP SUCCESS CRITERIA" "$test"; then
+            issues+=("$test_name: Missing '=== PRP SUCCESS CRITERIA (VERBATIM) ===' section")
+        else
+            echo -e "  ${GREEN}✓${NC} $test_name: Has verbatim success criteria"
+        fi
+
+        # Check for PRP VALIDATION COMMANDS section
+        if ! grep -q "=== PRP VALIDATION COMMANDS" "$test"; then
+            warnings+=("$test_name: Missing '=== PRP VALIDATION COMMANDS (VERBATIM) ===' section")
+        fi
+
+        # Check for PLAYWRIGHT_VERIFY
+        if ! grep -q "PLAYWRIGHT_VERIFY" "$test"; then
+            warnings+=("$test_name: Missing PLAYWRIGHT_VERIFY JSON block")
+        else
+            # Check PLAYWRIGHT_VERIFY has prp_ref
+            if ! grep -A 30 "PLAYWRIGHT_VERIFY" "$test" | grep -q "prp_ref\|prp_criteria"; then
+                warnings+=("$test_name: PLAYWRIGHT_VERIFY missing prp_ref/prp_criteria fields")
+            else
+                echo -e "  ${GREEN}✓${NC} $test_name: PLAYWRIGHT_VERIFY has prp references"
+            fi
+        fi
+
+        # Check for invariant checks
+        if ! grep -q "check_invariant_\|Invariant #" "$test"; then
+            warnings+=("$test_name: No invariant-specific checks found")
+        fi
+    done
+
+    # 7. Gate format checks
+    echo ""
+    echo -e "${CYAN}Checking gate format...${NC}"
+
+    for gate in "$steps_dir"/gate-*.sh 2>/dev/null; do
+        [[ ! -f "$gate" ]] && continue
+        local gate_name
+        gate_name=$(basename "$gate")
+
+        # Check for success criteria aggregation
+        if ! grep -q "Success Criteria Aggregated:" "$gate"; then
+            issues+=("$gate_name: Missing 'Success Criteria Aggregated:' in header")
+        else
+            echo -e "  ${GREEN}✓${NC} $gate_name: Has success criteria aggregation"
+        fi
+
+        # Check for performance targets
+        if ! grep -qE "Performance Targets:|BUILD_TIME|performance" "$gate"; then
+            warnings+=("$gate_name: Missing performance target checks")
+        fi
+
+        # Check for accessibility audit
+        if ! grep -qE "axe|accessibility|Invariant #11" "$gate"; then
+            warnings+=("$gate_name: Missing accessibility audit (Invariant #11)")
+        fi
+
+        # Check for phase test execution
+        if ! grep -qE "for test in|test-.*\.sh" "$gate"; then
+            warnings+=("$gate_name: Doesn't appear to run phase tests")
+        fi
+    done
+
+    # 8. PRP hash verification
+    echo ""
+    echo -e "${CYAN}Checking PRP hash consistency...${NC}"
+
+    local current_prp_hash
+    current_prp_hash=$(md5sum "$prp_file" 2>/dev/null | cut -c1-7 || md5 -q "$prp_file" 2>/dev/null | cut -c1-7 || echo "unknown")
+
+    local hash_mismatches=0
+    for file in "$steps_dir"/step-*.sh "$steps_dir"/test-*.sh "$steps_dir"/gate-*.sh 2>/dev/null; do
+        [[ ! -f "$file" ]] && continue
+        local file_hash
+        file_hash=$(grep "PRP Hash:" "$file" 2>/dev/null | awk '{print $NF}')
+        if [[ -n "$file_hash" && "$file_hash" != "$current_prp_hash" ]]; then
+            warnings+=("$(basename "$file"): PRP hash mismatch (file: $file_hash, current: $current_prp_hash)")
+            ((hash_mismatches++))
+        fi
+    done
+
+    if [[ $hash_mismatches -eq 0 ]]; then
+        echo -e "  ${GREEN}✓${NC} All files have consistent PRP hash (or no hash headers)"
+    else
+        echo -e "  ${YELLOW}!${NC} $hash_mismatches files have stale PRP hash"
+    fi
+
+    # 9. Coverage matrix checks
+    echo ""
+    echo -e "${CYAN}Checking PRP-COVERAGE.md...${NC}"
+
+    local coverage_file="$steps_dir/PRP-COVERAGE.md"
+    if [[ -f "$coverage_file" ]]; then
+        # Check for SC→test mapping
+        if ! grep -qE "Success Criteria.*Test Mapping|SC-.*test-" "$coverage_file"; then
+            warnings+=("PRP-COVERAGE.md: Missing Success Criteria → Test mapping table")
+        else
+            echo -e "  ${GREEN}✓${NC} Has SC → Test mapping"
+        fi
+
+        # Check for invariant coverage table
+        if ! grep -q "Invariant Coverage" "$coverage_file"; then
+            warnings+=("PRP-COVERAGE.md: Missing Invariant Coverage table")
+        else
+            echo -e "  ${GREEN}✓${NC} Has Invariant Coverage table"
+        fi
+    else
+        issues+=("PRP-COVERAGE.md: File not found")
+    fi
+
+    # 10. Generation log check
+    local gen_log="$steps_dir/RALPH-GENERATION-LOG.md"
+    if [[ -f "$gen_log" ]]; then
+        echo -e "  ${GREEN}✓${NC} RALPH-GENERATION-LOG.md exists"
+    else
+        warnings+=("RALPH-GENERATION-LOG.md: File not found (uncertainties not documented)")
+    fi
+
     echo ""
 
     # Report
@@ -2158,6 +2332,188 @@ except:
     echo "DONE"
 }
 
+# ============================================================================
+# RALPH STEP GENERATION (implement command)
+# ============================================================================
+
+cmd_implement() {
+    local prp_file="$1"
+    local output_dir="$2"
+    local phase="$3"  # Optional: generate only specific phase
+
+    [[ ! -f "$prp_file" ]] && { echo -e "${RED}PRP file not found: $prp_file${NC}"; exit 1; }
+
+    local prp_content
+    prp_content=$(cat "$prp_file")
+
+    local prp_name
+    prp_name=$(basename "$prp_file" .md | sed 's/-prp$//')
+
+    # Default output directory
+    if [[ -z "$output_dir" ]]; then
+        output_dir="./ralph-steps-${prp_name}"
+    fi
+
+    # Calculate PRP hash for traceability (macOS compatible)
+    local prp_hash
+    if command -v md5sum &> /dev/null; then
+        prp_hash=$(md5sum "$prp_file" | cut -c1-7)
+    else
+        prp_hash=$(md5 -q "$prp_file" | cut -c1-7)
+    fi
+
+    echo ""
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║  RALPH STEP GENERATION (v$VERSION)                              ║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "PRP: ${CYAN}$prp_file${NC}"
+    echo -e "PRP Hash: ${CYAN}$prp_hash${NC}"
+    echo -e "Output: ${CYAN}$output_dir${NC}"
+    [[ -n "$phase" ]] && echo -e "Phase filter: ${CYAN}$phase${NC}"
+    echo ""
+
+    # Extract PRP metadata
+    echo -e "${CYAN}Extracting PRP metadata...${NC}"
+
+    local prp_id confidence thinking_level domains
+    prp_id=$(echo "$prp_content" | grep -E "^prp_id:|PRP ID:" | head -1 | sed 's/.*://' | xargs)
+    confidence=$(echo "$prp_content" | grep -E "Confidence.*Score|confidence_score|Confidence:" | head -1 | grep -oE "[0-9]+\.[0-9]+|[0-9]+" | head -1)
+    thinking_level=$(echo "$prp_content" | grep -E "Thinking Level|thinking_level" | head -1 | sed 's/.*://' | xargs)
+    domains=$(echo "$prp_content" | grep -E "^domain:|Domain:" | head -1 | sed 's/.*://' | xargs)
+
+    echo -e "  PRP ID: ${prp_id:-unknown}"
+    echo -e "  Confidence: ${confidence:-N/A}/10"
+    echo -e "  Thinking Level: ${thinking_level:-Normal}"
+    echo -e "  Domains: ${domains:-general}"
+
+    # Count deliverables and phases
+    local deliverable_count phase_count
+    deliverable_count=$(echo "$prp_content" | grep -cE "^### (F[0-9]+\.[0-9]+|Phase [0-9]+\.[0-9]+)" 2>/dev/null | head -1 || echo "0")
+    phase_count=$(echo "$prp_content" | grep -cE "^## Phase [0-9]+|^## [0-9]+\." 2>/dev/null | head -1 || echo "0")
+
+    echo -e "  Deliverables: $deliverable_count"
+    echo -e "  Phases: $phase_count"
+    echo ""
+
+    # Load prompt template
+    local prompt_template="$TEMPLATES_DIR/implement-prompt.md"
+    if [[ ! -f "$prompt_template" ]]; then
+        echo -e "${RED}Error: implement-prompt.md template not found${NC}"
+        echo -e "${YELLOW}Expected at: $prompt_template${NC}"
+        echo -e "${YELLOW}Create the template first, or use /design implement instructions from design.md${NC}"
+        exit 1
+    fi
+
+    # Build the prompt
+    echo -e "${CYAN}Generating Ralph steps...${NC}"
+    echo -e "${DIM}(This may take a minute for large PRPs)${NC}"
+
+    local prompt
+    prompt=$(cat "$prompt_template")
+    prompt="${prompt//\{\{PRP_CONTENT\}\}/$prp_content}"
+
+    # Add phase filter if specified
+    if [[ -n "$phase" ]]; then
+        prompt="$prompt
+
+PHASE FILTER: Generate only Phase $phase steps, tests, and gate.
+Skip other phases."
+    fi
+
+    # Call Claude
+    local result
+    result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print 2>/dev/null)
+
+    track_cost "$prompt" "$result"
+
+    # Create output directory
+    mkdir -p "$output_dir"
+
+    # Save raw generation for debugging
+    echo "$result" > "$output_dir/.generation-raw.md"
+
+    # Parse and save files from result
+    # Expected format in result: === FILE: filename.sh ===
+    local current_file=""
+    local file_content=""
+    local files_created=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^===\ FILE:\ (.+)\ ===$ ]]; then
+            # Save previous file if exists
+            if [[ -n "$current_file" && -n "$file_content" ]]; then
+                echo "$file_content" > "$output_dir/$current_file"
+                [[ "$current_file" == *.sh ]] && chmod +x "$output_dir/$current_file"
+                ((files_created++))
+            fi
+            current_file="${BASH_REMATCH[1]}"
+            file_content=""
+        elif [[ "$line" == "=== END FILE ===" ]]; then
+            if [[ -n "$current_file" && -n "$file_content" ]]; then
+                echo "$file_content" > "$output_dir/$current_file"
+                [[ "$current_file" == *.sh ]] && chmod +x "$output_dir/$current_file"
+                ((files_created++))
+            fi
+            current_file=""
+            file_content=""
+        elif [[ -n "$current_file" ]]; then
+            file_content+="$line"$'\n'
+        fi
+    done <<< "$result"
+
+    # Save any remaining file
+    if [[ -n "$current_file" && -n "$file_content" ]]; then
+        echo "$file_content" > "$output_dir/$current_file"
+        [[ "$current_file" == *.sh ]] && chmod +x "$output_dir/$current_file"
+        ((files_created++))
+    fi
+
+    # Copy ralph runner template if it exists
+    if [[ -f "$TEMPLATES_DIR/ralph-runner.sh" && ! -f "$output_dir/ralph.sh" ]]; then
+        local runner_content
+        runner_content=$(cat "$TEMPLATES_DIR/ralph-runner.sh")
+        runner_content="${runner_content//\{\{PRP_ID\}\}/$prp_id}"
+        runner_content="${runner_content//\{\{PRP_HASH\}\}/$prp_hash}"
+        echo "$runner_content" > "$output_dir/ralph.sh"
+        chmod +x "$output_dir/ralph.sh"
+        ((files_created++))
+    fi
+
+    echo ""
+    if [[ $files_created -gt 0 ]]; then
+        echo -e "${GREEN}Generated $files_created files in $output_dir${NC}"
+    else
+        echo -e "${YELLOW}Warning: No files were parsed from LLM output${NC}"
+        echo -e "${YELLOW}Check $output_dir/.generation-raw.md for raw output${NC}"
+        echo -e "${YELLOW}The LLM may not have used the expected === FILE: xxx === format${NC}"
+    fi
+
+    # List generated files
+    echo ""
+    echo -e "Generated files:"
+    ls -la "$output_dir"/*.sh "$output_dir"/*.md 2>/dev/null | while read -r line; do
+        echo -e "  $line"
+    done
+
+    # Run ralph-check automatically if files were generated
+    if [[ $files_created -gt 0 ]]; then
+        echo ""
+        echo -e "${CYAN}Running ralph-check to verify format compliance...${NC}"
+        echo ""
+
+        cmd_ralph_check "$prp_file" "$output_dir" "true"
+    fi
+
+    echo ""
+    echo -e "${CYAN}Next steps:${NC}"
+    echo -e "  1. Review generated files in $output_dir"
+    echo -e "  2. Fix any ralph-check issues"
+    echo -e "  3. Run: cd $output_dir && ./ralph.sh 1"
+
+    show_cost_summary
+}
+
 cmd_ralph_check() {
     local prp_file="$1"
     local steps_dir="$2"
@@ -2301,6 +2657,7 @@ while [[ $# -gt 0 ]]; do
         --requirements) REQUIREMENTS="$2"; shift 2 ;;
         --journeys) JOURNEYS="$2"; shift 2 ;;
         --steps) STEPS_DIR="$2"; shift 2 ;;
+        --phase) PHASE="$2"; shift 2 ;;
         *) echo -e "${RED}Unknown option: $1${NC}"; usage ;;
     esac
 done
@@ -2315,6 +2672,7 @@ case "$COMMAND" in
     validate) cmd_validate "$FILE" "$QUICK" ;;
     generate) cmd_generate "$FILE" "$OUTPUT" ;;
     check) cmd_check "$FILE" "$QUICK" ;;
+    implement) cmd_implement "$FILE" "$OUTPUT" "$PHASE" ;;
     ralph-check) cmd_ralph_check "$FILE" "$STEPS_DIR" "$QUICK" ;;
     # Advanced commands (delegated)
     orchestrate) cmd_orchestrate "$FILE" "$@" ;;

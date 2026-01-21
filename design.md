@@ -1030,7 +1030,7 @@ Recommendations
 
 The Ralph Methodology provides atomic, test-verified implementation of PRPs. See [ralph-methodology.md](docs/ralph-methodology.md) for full documentation.
 
-### /design implement {prp-file} [--output dir]
+### /design implement {prp-file} [--output dir] [--phase N]
 
 Generate Ralph steps from an approved PRP using **structured extraction** (not freeform generation).
 
@@ -1038,7 +1038,21 @@ Generate Ralph steps from an approved PRP using **structured extraction** (not f
 ```
 /design implement PRPs/phase1-foundation-prp.md
 /design implement PRPs/feature-prp.md --output ./app/ralph-steps
+/design implement PRPs/large-prp.md --phase 2  # Generate only phase 2
 ```
+
+**Script Execution:**
+```bash
+# Uses the implement command in design-ops-v3.sh
+./enforcement/design-ops-v3.sh implement "{prp-file}" [--output dir] [--phase N]
+
+# This loads the prompt template from:
+# $TEMPLATES_DIR/implement-prompt.md
+```
+
+**Prompt Template Location:** `~/.claude/plugins/design-ops/templates/implement-prompt.md`
+
+The prompt template ensures consistent, deterministic output across all invocations.
 
 **CRITICAL: Extraction, Not Generation**
 
