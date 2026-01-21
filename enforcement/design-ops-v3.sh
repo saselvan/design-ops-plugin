@@ -295,7 +295,37 @@ require_review_acknowledgment() {
 
 call_claude() {
     local prompt="$1"
+    local thinking_level="${2:-Normal}"  # Optional: Normal, Think, Think Hard, Ultrathink
     local result
+
+    # For Ultrathink level, add explicit Chain of Thought instructions
+    if [[ "$thinking_level" == "Ultrathink" ]]; then
+        prompt="EXTENDED THINKING MODE ACTIVATED
+
+Before generating your response, work through these steps internally:
+1. ANALYZE: What are all the requirements and constraints?
+2. DECOMPOSE: Break down into sub-problems
+3. VERIFY: Check each assumption against invariants
+4. SYNTHESIZE: Combine verified components
+5. VALIDATE: Ensure completeness before output
+
+Take your time. Quality over speed.
+
+---
+
+$prompt"
+    elif [[ "$thinking_level" == "Think Hard" ]]; then
+        prompt="CAREFUL ANALYSIS REQUIRED
+
+Before responding:
+1. Identify all integration points and edge cases
+2. Verify assumptions are explicitly stated
+3. Check for potential invariant violations
+
+---
+
+$prompt"
+    fi
 
     result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print 2>/dev/null)
 
@@ -1066,7 +1096,7 @@ Fill all sections above.
 Do not include any preamble or explanation before the PRP."
 
     local result
-    result=$(call_claude "$prompt")
+    result=$(call_claude "$prompt" "$thinking_level")
 
     # Clean up
     local cleaned
