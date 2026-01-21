@@ -1826,7 +1826,9 @@ Analyze whether the implementation follows the PRP. Provide:
 - compliance_gaps: Specific ways the steps deviate from PRP requirements (max 5)
 - schema_issues: Field names, types, or constraints that don't match PRP definitions (max 5)
 - missing_features: PRP features not addressed in the steps (max 5)
-- strengths: What the implementation does well (1-2)"
+- strengths: What the implementation does well (1-2)
+
+If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It's better to express uncertainty than to guess."
 
     local raw_result result
     raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
