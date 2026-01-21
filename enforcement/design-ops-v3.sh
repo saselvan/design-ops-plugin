@@ -850,6 +850,23 @@ generate_prp() {
     local spec_name
     spec_name=$(basename "$spec_file" .md)
 
+    # Calculate spec hash for caching
+    local spec_hash
+    spec_hash=$(echo "$spec_content" | md5 2>/dev/null || echo "$spec_content" | md5sum | cut -d' ' -f1)
+
+    # Check if cached PRP exists with same spec hash
+    if [[ -f "$output_file" ]]; then
+        local cached_hash
+        cached_hash=$(grep "spec_hash:" "$output_file" 2>/dev/null | head -1 | awk '{print $2}')
+        if [[ "$cached_hash" == "$spec_hash" ]]; then
+            echo -e "${GREEN}━━━ Using Cached PRP ━━━${NC}"
+            echo -e "  Output: ${CYAN}$output_file${NC}"
+            echo -e "  Spec hash matches cached PRP (${spec_hash:0:8}...)"
+            echo -e "  ${YELLOW}To force regeneration, delete the PRP file first.${NC}"
+            return 0
+        fi
+    fi
+
     # Calculate next PRP ID (increment based on existing PRPs)
     local today
     today=$(date +%Y-%m-%d)
@@ -1016,6 +1033,7 @@ PRP STRUCTURE TO OUTPUT:
 \`\`\`yaml
 prp_id: $prp_id
 source_spec: $spec_file
+spec_hash: $spec_hash
 validation_status: PASSED
 validated_date: $(date +%Y-%m-%d)
 domain: [extracted from spec]
