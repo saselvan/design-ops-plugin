@@ -30,6 +30,38 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# PRP Generation Configuration
+DESIGN_OPS_BASE="${DESIGN_OPS_BASE:-$HOME/.claude/plugins/design-ops}"
+INVARIANTS_DIR="$DESIGN_OPS_BASE"
+DOMAINS_DIR="$DESIGN_OPS_BASE/domains"
+TEMPLATES_DIR="$DESIGN_OPS_BASE/templates"
+
+# Domain mapping function (bash 3.x compatible)
+# Returns: file:start-end or empty if not found
+get_domain_mapping() {
+    local domain="$1"
+    case "$domain" in
+        "consumer product"|"consumer-product")
+            echo "consumer-product.md:11-15" ;;
+        "physical construction"|"physical-construction"|"construction")
+            echo "physical-construction.md:16-21" ;;
+        "data architecture"|"data-architecture"|"data")
+            echo "data-architecture.md:22-26" ;;
+        "integration")
+            echo "integration.md:27-30" ;;
+        "healthcare ai"|"healthcare-ai")
+            echo "healthcare-ai.md:27-30" ;;
+        "hls"|"hls solution accelerator"|"hls-solution-accelerator"|"databricks")
+            echo "hls-solution-accelerator.md:31-38" ;;
+        "remote management"|"remote-management"|"remote")
+            echo "remote-management.md:31-36" ;;
+        "skill gap"|"skill-gap"|"skill-gap-transcendence")
+            echo "skill-gap-transcendence.md:37-43" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
 # Cost tracking (estimates based on Claude API pricing)
 TOTAL_INPUT_TOKENS=0
 TOTAL_OUTPUT_TOKENS=0
@@ -186,8 +218,15 @@ require_review_acknowledgment() {
     # Check if running in a terminal (stdin is a tty)
     if [[ ! -t 0 ]]; then
         echo ""
-        echo -e "${YELLOW}[Non-interactive] No tty detected, skipping review gate${NC}"
-        return 0
+        echo -e "${RED}╔═══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${RED}║  HUMAN REVIEW REQUIRED - STOPPING                             ║${NC}"
+        echo -e "${RED}╚═══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  ${YELLOW}No interactive terminal detected.${NC}"
+        echo -e "  ${YELLOW}Review the suggestions above with the user before proceeding.${NC}"
+        echo -e "  ${CYAN}Re-run with --skip-review only after human approval.${NC}"
+        echo ""
+        return 1
     fi
 
     echo ""
@@ -484,9 +523,186 @@ except Exception as e:
     echo "DONE"  # Signal completion, not a grade
 }
 
-# ============================================================================
-# PRP GENERATION (One-shot, no loops)
-# ============================================================================
+# =============================================================================
+# PRP GENERATION HELPERS
+# =============================================================================
+
+# Parse domains from spec header
+parse_domains() {
+    local spec_content="$1"
+
+    local domain_line
+    domain_line=$(echo "$spec_content" | grep -iE "^\*?\*?Domain\*?\*?:" | head -1)
+
+    if [[ -z "$domain_line" ]]; then
+        echo "universal"
+        return
+    fi
+
+    local domain_value
+    domain_value=$(echo "$domain_line" | sed 's/.*://' | tr '[:upper:]' '[:lower:]' | xargs)
+
+    echo "$domain_value" | tr '+,' '\n' | while read -r domain; do
+        domain=$(echo "$domain" | xargs)
+        [[ -n "$domain" ]] && echo "$domain"
+    done
+}
+
+# Resolve domains to invariant files and counts
+resolve_domain_invariants() {
+    local spec_content="$1"
+
+    local domains
+    domains=$(parse_domains "$spec_content")
+
+    local invariant_refs=""
+    local total_count=11
+    local domain_count=0
+    local has_skill_gap=false
+
+    invariant_refs="Universal: $INVARIANTS_DIR/system-invariants.md (invariants 1-11)"
+
+    while IFS= read -r domain; do
+        [[ -z "$domain" || "$domain" == "universal" ]] && continue
+
+        local mapping
+        mapping=$(get_domain_mapping "$domain")
+        if [[ -n "$mapping" ]]; then
+            local file="${mapping%%:*}"
+            local range="${mapping##*:}"
+            local start="${range%%-*}"
+            local end="${range##*-}"
+            local count=$((end - start + 1))
+
+            invariant_refs+="\nDomain ($domain): $DOMAINS_DIR/$file (invariants $range)"
+            total_count=$((total_count + count))
+            domain_count=$((domain_count + 1))
+
+            [[ "$file" == "skill-gap-transcendence.md" ]] && has_skill_gap=true
+        else
+            invariant_refs+="\nDomain ($domain): UNKNOWN - manual review required"
+            domain_count=$((domain_count + 1))
+        fi
+    done <<< "$domains"
+
+    echo "INVARIANT_REFS<<EOF"
+    echo -e "$invariant_refs"
+    echo "EOF"
+    echo "TOTAL_INVARIANTS=$total_count"
+    echo "DOMAIN_COUNT=$domain_count"
+    echo "HAS_SKILL_GAP=$has_skill_gap"
+}
+
+# Analyze spec for confidence factors
+analyze_spec_confidence() {
+    local spec_content="$1"
+
+    # Factor 1: Requirement Clarity (30%)
+    local clarity_score=0.5
+    if echo "$spec_content" | grep -qiE "## Success Criteria|### Success Criteria"; then
+        clarity_score=0.7
+        if echo "$spec_content" | grep -qE "\|.*Target.*\||\|.*Metric.*\|"; then
+            clarity_score=0.9
+        fi
+    fi
+
+    # Factor 2: Pattern Availability (25%)
+    local pattern_score=0.4
+    if echo "$spec_content" | grep -qE "src/|app/|components/|\.tsx|\.ts|existing"; then
+        pattern_score=0.7
+    fi
+    if echo "$spec_content" | grep -qiE "## Examples|### Examples|## Patterns|existing.*pattern"; then
+        pattern_score=0.9
+    fi
+
+    # Factor 3: Test Coverage Plan (20%)
+    local test_score=0.3
+    local validation_count
+    validation_count=$(echo "$spec_content" | grep -cE "npm (test|run)|pytest|curl|verify|assert" 2>/dev/null | head -1 || echo "0")
+    validation_count=${validation_count:-0}
+    if [[ "$validation_count" -ge 4 ]] 2>/dev/null; then
+        test_score=0.9
+    elif [[ "$validation_count" -ge 2 ]] 2>/dev/null; then
+        test_score=0.7
+    elif [[ "$validation_count" -ge 1 ]] 2>/dev/null; then
+        test_score=0.5
+    fi
+
+    # Factor 4: Edge Case Handling (15%)
+    local edge_score=0.3
+    local failure_count
+    failure_count=$(echo "$spec_content" | grep -cE "^### FM[0-9]|Failure Mode|## Failure" 2>/dev/null | head -1 || echo "0")
+    failure_count=${failure_count:-0}
+    if [[ "$failure_count" -ge 3 ]] 2>/dev/null; then
+        edge_score=0.9
+    elif [[ "$failure_count" -ge 1 ]] 2>/dev/null; then
+        edge_score=0.6
+    fi
+    if echo "$spec_content" | grep -qiE "Degradation|Fallback|Recovery"; then
+        edge_score=$(echo "$edge_score + 0.1" | bc)
+        [[ $(echo "$edge_score > 1.0" | bc) -eq 1 ]] && edge_score=1.0
+    fi
+
+    # Factor 5: Tech Familiarity (10%)
+    local tech_score=0.8
+    if echo "$spec_content" | grep -qiE "skill.?gap|unknown|learning|first.?time|new.?tech"; then
+        tech_score=0.4
+    fi
+
+    local score
+    score=$(echo "scale=2; ($clarity_score * 0.30) + ($pattern_score * 0.25) + ($test_score * 0.20) + ($edge_score * 0.15) + ($tech_score * 0.10)" | bc)
+    score=$(echo "scale=1; $score * 10" | bc)
+
+    echo "CLARITY_SCORE=$clarity_score"
+    echo "PATTERN_SCORE=$pattern_score"
+    echo "TEST_SCORE=$test_score"
+    echo "EDGE_SCORE=$edge_score"
+    echo "TECH_SCORE=$tech_score"
+    echo "CONFIDENCE_SCORE=$score"
+}
+
+# Determine thinking level
+determine_thinking_level() {
+    local confidence="$1"
+    local domain_count="$2"
+    local invariant_count="$3"
+    local has_skill_gap="$4"
+
+    local level="Normal"
+    local focus=""
+
+    local conf_int
+    conf_int=$(echo "$confidence" | cut -d'.' -f1)
+
+    if [[ "$conf_int" -lt 5 ]] || [[ "$domain_count" -ge 3 ]] || [[ "$invariant_count" -gt 30 ]]; then
+        level="Ultrathink"
+        focus="Verify all assumptions before implementation|Check invariant compliance at each decision point"
+    elif [[ "$conf_int" -lt 7 ]] || [[ "$domain_count" -ge 2 ]] || [[ "$invariant_count" -gt 20 ]]; then
+        level="Think Hard"
+        focus="Validate integration points|Consider edge cases explicitly"
+    elif [[ "$conf_int" -lt 9 ]]; then
+        level="Think"
+        focus="Adapt patterns to context|Verify success criteria mapping"
+    else
+        focus="Execute plan|Standard validation"
+    fi
+
+    if [[ "$has_skill_gap" == "true" ]]; then
+        if [[ "$level" == "Normal" ]]; then
+            level="Think"
+        elif [[ "$level" == "Think" ]]; then
+            level="Think Hard"
+        fi
+        focus="$focus|Discovery phase required - unknown unknowns likely"
+    fi
+
+    echo "THINKING_LEVEL=$level"
+    echo "THINKING_FOCUS=$focus"
+}
+
+# =============================================================================
+# PRP GENERATION (2026 Best Practices)
+# =============================================================================
 
 generate_prp() {
     local spec_file="$1"
@@ -494,43 +710,269 @@ generate_prp() {
     local spec_content
     spec_content=$(cat "$spec_file")
 
-    echo -e "${BLUE}━━━ Generating PRP ━━━${NC}"
-    echo -e "${CYAN}One-shot generation (no improvement loops)...${NC}"
+    local spec_name
+    spec_name=$(basename "$spec_file" .md)
 
-    local prompt="Transform this specification into a Product Requirements Prompt (PRP).
+    echo -e "${BLUE}━━━ Generating PRP (2026 Best Practices) ━━━${NC}"
 
-SPECIFICATION:
+    # Step 1: Parse domains and resolve invariants
+    echo -e "${CYAN}Analyzing spec domains...${NC}"
+    local domain_info
+    domain_info=$(resolve_domain_invariants "$spec_content")
+
+    local invariant_refs total_invariants domain_count has_skill_gap
+    invariant_refs=$(echo "$domain_info" | sed -n '/INVARIANT_REFS<<EOF/,/EOF/p' | sed '1d;$d')
+    total_invariants=$(echo "$domain_info" | grep "TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_info" | grep "DOMAIN_COUNT=" | cut -d= -f2)
+    has_skill_gap=$(echo "$domain_info" | grep "HAS_SKILL_GAP=" | cut -d= -f2)
+
+    echo -e "  Domains detected: $domain_count (+ universal)"
+    echo -e "  Total invariants: $total_invariants"
+    [[ "$has_skill_gap" == "true" ]] && echo -e "  ${YELLOW}⚠ Skill-gap domain detected${NC}"
+
+    # Step 2: Calculate confidence
+    echo -e "${CYAN}Calculating confidence score...${NC}"
+    local confidence_info
+    confidence_info=$(analyze_spec_confidence "$spec_content")
+
+    local confidence_score clarity_score pattern_score test_score edge_score tech_score
+    confidence_score=$(echo "$confidence_info" | grep "CONFIDENCE_SCORE=" | cut -d= -f2)
+    clarity_score=$(echo "$confidence_info" | grep "CLARITY_SCORE=" | cut -d= -f2)
+    pattern_score=$(echo "$confidence_info" | grep "PATTERN_SCORE=" | cut -d= -f2)
+    test_score=$(echo "$confidence_info" | grep "TEST_SCORE=" | cut -d= -f2)
+    edge_score=$(echo "$confidence_info" | grep "EDGE_SCORE=" | cut -d= -f2)
+    tech_score=$(echo "$confidence_info" | grep "TECH_SCORE=" | cut -d= -f2)
+
+    echo -e "  Confidence: $confidence_score/10"
+
+    # Step 3: Determine thinking level
+    local thinking_info
+    thinking_info=$(determine_thinking_level "$confidence_score" "$domain_count" "$total_invariants" "$has_skill_gap")
+
+    local thinking_level thinking_focus
+    thinking_level=$(echo "$thinking_info" | grep "THINKING_LEVEL=" | cut -d= -f2)
+    thinking_focus=$(echo "$thinking_info" | grep "THINKING_FOCUS=" | cut -d= -f2)
+
+    echo -e "  Thinking level: ${YELLOW}$thinking_level${NC}"
+
+    # Step 4: Determine risk level
+    local risk_level
+    if (( $(echo "$confidence_score < 5" | bc -l) )); then
+        risk_level="Low/Red - STOP: Address gaps before proceeding"
+    elif (( $(echo "$confidence_score < 7" | bc -l) )); then
+        risk_level="Medium/Yellow - CAUTION: Proceed with risk mitigation"
+    else
+        risk_level="High/Green - PROCEED: Normal execution path"
+    fi
+
+    # Step 5: Load PRP template or use fallback
+    local prp_template_note=""
+    if [[ -f "$TEMPLATES_DIR/prp-base.md" ]]; then
+        prp_template_note="Using template: $TEMPLATES_DIR/prp-base.md"
+    else
+        prp_template_note="Template not found - using inline structure"
+    fi
+    echo -e "  ${DIM}$prp_template_note${NC}"
+
+    # Step 6: Build the prompt
+    echo -e "${CYAN}Generating PRP...${NC}"
+
+    local prompt="You are a PRP compiler. Your job is EXTRACTION and TRANSFORMATION from a validated spec.
+
+CRITICAL RULES:
+- Extract content from the spec below. Do NOT invent content.
+- If a spec section is missing or unclear, use \"NOT_SPECIFIED_IN_SPEC\" for that field
+- Preserve all specific numbers, commands, file paths, and technical details exactly
+- Copy Validation Commands VERBATIM - do not paraphrase
+- If unsure about any extraction, flag it with [UNCERTAIN: reason]
+
+DOMAIN & INVARIANTS (reference paths only):
+$invariant_refs
+
+PRE-CALCULATED VALUES (use these directly in the PRP):
+- PRP ID: PRP-$(date +%Y-%m-%d)-001
+- Source Spec: $spec_file
+- Validation Date: $(date +%Y-%m-%d)
+- Confidence Score: $confidence_score/10
+- Risk Level: $risk_level
+- Thinking Level: $thinking_level
+- Thinking Focus: $(echo "$thinking_focus" | tr '|' ', ')
+- Domain Count: $domain_count
+- Invariant Count: $total_invariants
+
+CONFIDENCE BREAKDOWN (include in Section 2):
+| Factor | Weight | Score | Notes |
+|--------|--------|-------|-------|
+| Requirement Clarity | 30% | $clarity_score | Success criteria with metrics |
+| Pattern Availability | 25% | $pattern_score | Existing code references |
+| Test Coverage Plan | 20% | $test_score | Validation commands count |
+| Edge Case Handling | 15% | $edge_score | Failure modes documented |
+| Tech Familiarity | 10% | $tech_score | Known vs skill-gap |
+
+VERBATIM PRESERVATION (copy these sections EXACTLY, do not summarize):
+- Database Schema (SQL) → Include complete CREATE TABLE statements
+- Validation Commands → Copy all bash/curl commands exactly
+- API Endpoints → Preserve full endpoint specifications
+- Column Mappings → Include all column names and transformations
+- Error Messages → Copy exact error text
+- UI Wireframes (ASCII) → Preserve character-for-character
+- State Transitions → Copy the full state machine notation
+- Code Snippets → Preserve all code exactly
+- Tables with data → Copy all rows, do not truncate
+
+SUMMARIZATION ALLOWED (these can be condensed):
+- Problem Statement → Keep to 2-3 sentences
+- Overview narrative → Condense to 1 paragraph
+- Background/context sections → Brief summary
+
+EXTRACTION MAP - Follow this mapping:
+| Spec Section | → | PRP Section | Extraction Rule |
+|--------------|---|-------------|-----------------|
+| Problem Statement | → | 1.1 Problem Statement | Summarize to 2-3 sentences |
+| Overview | → | 1.2 Solution Summary | Summarize WHAT not HOW |
+| Scope (In/Out) | → | 1.3 Scope Boundaries | Convert to table, keep ALL items |
+| Success Criteria table | → | 2.1 Primary Metrics | VERBATIM - copy table exactly |
+| Database Schema (SQL) | → | Appendix B: Database Schema | VERBATIM - full CREATE TABLE |
+| Column Mappings | → | Appendix D: Import Mappings | VERBATIM - all columns |
+| API Endpoints | → | Appendix C: API Specification | VERBATIM - all endpoints |
+| UI Wireframes | → | Appendix E: UI Reference | VERBATIM - preserve ASCII art |
+| Feature sections (F0, F1...) | → | Phase sections | Keep ALL requirements as checklist |
+| Validation Commands | → | 8. Validation Commands | VERBATIM - copy all commands |
+| Failure Modes (FM1...) | → | 4.1 Risk Matrix | VERBATIM descriptions + probability/impact |
+| Degradation Paths | → | 4.2 Fallback Strategies | VERBATIM as IF/THEN format |
+| Error Messages | → | Appendix F: Error Catalog | VERBATIM - all error strings |
+| Dependencies | → | 5.3 External Dependencies | VERBATIM - preserve table |
+| Algorithm Details | → | Appendix G: Algorithm Details | VERBATIM - fuzzy search, etc. |
+| Open Questions | → | Add to risks + Appendix | VERBATIM - list all |
+
+LENGTH REQUIREMENT:
+The output PRP should be approximately the same length as the input spec, or LONGER.
+A 368-line spec should produce a 350-500 line PRP.
+If your output is significantly shorter, you are summarizing too aggressively - go back and include more detail.
+
+PRP STRUCTURE TO OUTPUT:
+# PRP: $spec_name
+
+## Meta
+\`\`\`yaml
+prp_id: PRP-$(date +%Y-%m-%d)-001
+source_spec: $spec_file
+validation_status: PASSED
+validated_date: $(date +%Y-%m-%d)
+domain: [extracted from spec]
+version: 1.0
+\`\`\`
+
+## Confidence Score
+### Overall Score
+| Score | Risk Level | Recommendation |
+|-------|------------|----------------|
+| $confidence_score | [color] | [action] |
+
+### Breakdown
+[Use the confidence breakdown table above]
+
+## 1. Project Overview
+### 1.1 Problem Statement
+[Extract from spec]
+
+### 1.2 Solution Summary
+[Extract from spec overview]
+
+### 1.3 Scope Boundaries
+| In Scope | Out of Scope |
+|----------|--------------|
+[Extract from spec]
+
+## 2. Success Criteria
+[Extract success criteria table from spec EXACTLY]
+
+## 3. Timeline with Validation Gates
+[Map F0, F1, F2... to Phase 1, Phase 2, Phase 3... with gates]
+
+## 4. Risk Assessment
+### 4.1 Risk Matrix
+[Extract from Failure Modes, add probability/impact]
+
+### 4.2 Fallback Strategies
+[Extract from Degradation Paths as IF/THEN]
+
+## 5. Resource Requirements
+### 5.3 External Dependencies
+[Extract dependencies table]
+
+## 8. Validation Commands
+### 8.1 Test Verification
+[COPY VERBATIM from spec Validation Commands section]
+
+## 9. Recommended Thinking Level
+| Factor | Value | Impact |
+|--------|-------|--------|
+| Confidence Score | $confidence_score | [impact note] |
+| Domains Involved | $domain_count | [impact note] |
+| Invariants Applied | $total_invariants | [impact note] |
+
+**Overall Level**: $thinking_level
+**Apply higher thinking to**: $(echo "$thinking_focus" | tr '|' ', ')
+
+## 10. State Transitions
+[Extract from spec state transitions if present, or derive from feature flows]
+
+## Appendix A: Source Spec Reference
+**Spec Path**: $spec_file
+**Invariants Validated**: Universal (1-11)$(echo "$invariant_refs" | grep "Domain" | sed 's/.*invariants /+ /g' | tr '\n' ' ')
+
+## Appendix B: Database Schema
+[VERBATIM - Include ALL CREATE TABLE statements from spec]
+
+## Appendix C: API Specification
+[VERBATIM - Include ALL API endpoints from spec]
+
+## Appendix D: Import Column Mappings
+[VERBATIM - Include ALL column mapping tables from spec]
+
+## Appendix E: UI Wireframes
+[VERBATIM - Include ALL ASCII wireframes/mockups from spec]
+
+## Appendix F: Error Message Catalog
+[VERBATIM - Include ALL error messages from spec]
+
+## Appendix G: Algorithm Details
+[VERBATIM - Include fuzzy search, matching algorithms from spec]
+
+QUALITY CHECK BEFORE RESPONDING:
+Before outputting the PRP, verify:
+1. Did you include ALL database schema SQL? (If spec has CREATE TABLE, PRP must have it)
+2. Did you include ALL API endpoints? (Count them - spec has X, PRP should have X)
+3. Did you include ALL validation commands? (Copy verbatim)
+4. Did you preserve UI wireframes? (ASCII art must be character-perfect)
+5. Did you include ALL column mappings? (Every column from import sections)
+6. Did you include ALL error messages? (Every error string from spec)
+7. Is your output at least 80% the length of the input spec?
+
+If any answer is NO, go back and add the missing content before outputting.
+
+SPEC CONTENT:
+<spec>
 $spec_content
+</spec>
 
-OUTPUT REQUIREMENTS:
-1. Start directly with the PRP content - NO preamble, NO \"Here's the PRP\", NO explanations
-2. Use this structure:
-   - ## Meta (prp_id, date, status)
-   - ## Overview (problem, solution, scope)
-   - ## Success Criteria (measurable, with numbers)
-   - ## Timeline (phases with clear deliverables)
-   - ## Risks (likelihood, impact, mitigation)
-   - ## Validation (how to verify completion)
-
-3. Be specific: use actual numbers, not \"fast\" or \"efficient\"
-4. No placeholders like [FILL_IN] - use reasonable defaults if needed
-5. Keep it actionable - an engineer should be able to start immediately
-
-Output the PRP in markdown, starting with # PRP:"
+OUTPUT:
+Start directly with: # PRP: $spec_name
+Fill all sections above.
+Do not include any preamble or explanation before the PRP."
 
     local result
     result=$(call_claude "$prompt")
 
-    # Clean up: remove any preamble before the actual PRP
+    # Clean up
     local cleaned
-    cleaned=$(echo "$result" | sed -n '/^# PRP\|^# .*PRP\|^## Meta/,$p')
+    cleaned=$(echo "$result" | sed -n '/^# PRP/,$p')
 
-    # If cleaning removed everything, use original
     if [[ -z "$cleaned" ]]; then
         cleaned="$result"
     fi
 
-    # Remove markdown code block wrappers if present
     cleaned=$(echo "$cleaned" | sed '/^```markdown$/d' | sed '/^```$/d')
 
     echo "$cleaned" > "$output_file"
@@ -538,6 +980,7 @@ Output the PRP in markdown, starting with # PRP:"
     local lines
     lines=$(wc -l < "$output_file" | tr -d ' ')
     echo -e "${GREEN}✓ Generated: $output_file ($lines lines)${NC}"
+    echo -e "${CYAN}  Confidence: $confidence_score/10 | Thinking: $thinking_level${NC}"
 }
 
 # ============================================================================
@@ -569,6 +1012,23 @@ cmd_stress_test() {
     echo -e "Spec: ${CYAN}$spec_file${NC}"
     [[ -n "$requirements_file" ]] && echo -e "Requirements: ${CYAN}$requirements_file${NC}"
     [[ -n "$journeys_file" ]] && echo -e "User Journeys: ${CYAN}$journeys_file${NC}"
+    echo ""
+
+    # ━━━ Domain Detection ━━━
+    echo -e "${BLUE}━━━ Domain Detection ━━━${NC}"
+    local domain_result
+    domain_result=$(resolve_domain_invariants "$spec_content")
+
+    local invariant_refs total_invariants domain_count
+    invariant_refs=$(echo "$domain_result" | sed -n '/^INVARIANT_REFS<<EOF$/,/^EOF$/p' | sed '1d;$d')
+    total_invariants=$(echo "$domain_result" | grep "^TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_result" | grep "^DOMAIN_COUNT=" | cut -d= -f2)
+
+    echo -e "  Domains detected: ${CYAN}$((domain_count + 1))${NC} (including universal)"
+    echo -e "  Total invariants: ${CYAN}$total_invariants${NC}"
+    echo -e "$invariant_refs" | while read -r line; do
+        [[ -n "$line" ]] && echo -e "    ${CYAN}→${NC} $line"
+    done
     echo ""
 
     # ━━━ Deterministic Coverage Checks ━━━
@@ -656,10 +1116,20 @@ cmd_stress_test() {
         echo -e "${BLUE}━━━ LLM Deep Analysis ━━━${NC}"
         echo -e "${CYAN}Analyzing completeness...${NC}"
 
-        # JSON schema for structured output - no grades, just suggestions
-        local schema='{"type":"object","properties":{"summary":{"type":"string"},"missing_requirements":{"type":"array","items":{"type":"string"}},"missing_failure_modes":{"type":"array","items":{"type":"string"}},"critical_questions":{"type":"array","items":{"type":"string"}}},"required":["summary","critical_questions"]}'
+        # JSON schema for structured output - includes invariant violations
+        local schema='{"type":"object","properties":{"summary":{"type":"string"},"invariant_violations":{"type":"array","items":{"type":"string"}},"missing_failure_modes":{"type":"array","items":{"type":"string"}},"missing_coverage":{"type":"array","items":{"type":"string"}},"critical_blockers":{"type":"array","items":{"type":"string"}}},"required":["summary","critical_blockers"]}'
 
-        local prompt="You are a QA engineer stress-testing a specification for completeness.
+        local prompt="You are a QA engineer stress-testing a specification against domain-specific invariants.
+
+APPLICABLE INVARIANTS:
+$invariant_refs
+
+Key invariants to check:
+- Invariant #1 (Ambiguity is Invalid): Every term must have operational definition
+- Invariant #4 (No Irreversible Without Recovery): Destructive actions need undo/confirmation
+- Invariant #5 (Execution Must Fail Loudly): Errors must be visible, not silent
+- Invariant #7 (Validation Must Be Executable): Success criteria must be testable
+- Invariant #10 (Degradation Path Exists): What happens when dependencies fail?
 
 SPECIFICATION:
 $spec_content"
@@ -680,11 +1150,16 @@ $journeys_content"
 
         prompt="$prompt
 
-Analyze this spec for completeness. Provide:
-- summary: One sentence describing what this spec covers
-- missing_requirements: Requirements that seem unaddressed (max 5, or empty if comprehensive)
-- missing_failure_modes: Failure scenarios worth considering (max 5, or empty if comprehensive)
-- critical_questions: Questions to consider before implementation (max 5)"
+Check this spec for violations of the applicable invariants. Be specific - reference invariant numbers.
+
+Provide:
+- summary: One sentence on overall completeness
+- invariant_violations: Specific invariants that may be violated (reference by number, e.g., 'Invariant #4: delete without undo') - max 5
+- missing_failure_modes: Failure scenarios required by domain but not addressed - max 5
+- missing_coverage: User journey steps or requirements not covered - max 5
+- critical_blockers: Questions that MUST be answered before proceeding - max 5
+
+If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It's better to express uncertainty than to guess."
 
         local raw_result result
         raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
@@ -702,16 +1177,33 @@ Analyze this spec for completeness. Provide:
             echo -e "Summary: $summary"
             echo ""
 
-            # Show missing requirements
-            echo -e "${YELLOW}Requirements to Consider:${NC}"
+            # Show invariant violations
+            echo -e "${RED}Invariant Violations:${NC}"
             echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
-    missing = data.get('missing_requirements', [])
+    violations = data.get('invariant_violations', [])
+    if violations:
+        for v in violations[:5]:
+            print(f'  ✗ {v}')
+    else:
+        print('  (None identified - invariants satisfied)')
+except:
+    print('  (Could not parse)')
+" 2>/dev/null
+
+            # Show missing coverage
+            echo ""
+            echo -e "${YELLOW}Missing Coverage:${NC}"
+            echo "$result" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    missing = data.get('missing_coverage', [])
     if missing:
         for m in missing[:5]:
-            print(f'  ✗ {m}')
+            print(f'  ? {m}')
     else:
         print('  (None identified)')
 except:
@@ -735,19 +1227,19 @@ except:
     print('  (Could not parse)')
 " 2>/dev/null
 
-            # Show questions to consider
+            # Show critical blockers
             echo ""
-            echo -e "${YELLOW}Questions to Consider:${NC}"
+            echo -e "${RED}Critical Blockers:${NC}"
             echo "$result" | python3 -c "
 import json, sys
 try:
     data = json.load(sys.stdin)
-    questions = data.get('critical_questions', [])
-    if questions:
-        for i, q in enumerate(questions[:5], 1):
-            print(f'  {i}. {q}')
+    blockers = data.get('critical_blockers', [])
+    if blockers:
+        for i, b in enumerate(blockers[:5], 1):
+            print(f'  {i}. {b}')
     else:
-        print('  (None - spec looks comprehensive)')
+        print('  (None - ready for implementation)')
 except:
     print('  (Could not parse)')
 " 2>/dev/null
