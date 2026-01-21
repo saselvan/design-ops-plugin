@@ -2019,7 +2019,7 @@ check_ralph_deterministic() {
     echo ""
     echo -e "${CYAN}Checking step header format...${NC}"
 
-    for step in "$steps_dir"/step-*.sh 2>/dev/null; do
+    for step in "$steps_dir"/step-*.sh; do
         [[ ! -f "$step" ]] && continue
         local step_name
         step_name=$(basename "$step")
@@ -2061,7 +2061,7 @@ check_ralph_deterministic() {
     echo ""
     echo -e "${CYAN}Checking test format...${NC}"
 
-    for test in "$steps_dir"/test-*.sh 2>/dev/null; do
+    for test in "$steps_dir"/test-*.sh; do
         [[ ! -f "$test" ]] && continue
         local test_name
         test_name=$(basename "$test")
@@ -2100,7 +2100,7 @@ check_ralph_deterministic() {
     echo ""
     echo -e "${CYAN}Checking gate format...${NC}"
 
-    for gate in "$steps_dir"/gate-*.sh 2>/dev/null; do
+    for gate in "$steps_dir"/gate-*.sh; do
         [[ ! -f "$gate" ]] && continue
         local gate_name
         gate_name=$(basename "$gate")
@@ -2136,7 +2136,7 @@ check_ralph_deterministic() {
     current_prp_hash=$(md5sum "$prp_file" 2>/dev/null | cut -c1-7 || md5 -q "$prp_file" 2>/dev/null | cut -c1-7 || echo "unknown")
 
     local hash_mismatches=0
-    for file in "$steps_dir"/step-*.sh "$steps_dir"/test-*.sh "$steps_dir"/gate-*.sh 2>/dev/null; do
+    for file in "$steps_dir"/step-*.sh "$steps_dir"/test-*.sh "$steps_dir"/gate-*.sh; do
         [[ ! -f "$file" ]] && continue
         local file_hash
         file_hash=$(grep "PRP Hash:" "$file" 2>/dev/null | awk '{print $NF}')
