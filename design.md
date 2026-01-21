@@ -113,6 +113,42 @@ This skill is used by **Architect (Atlas)** for system design and **Engineer (De
 
 ## Command Reference
 
+### Command Workflow
+
+**MUST FOLLOW THIS ORDER** - each step catches different problems:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  1. /design stress-test    "Is the spec COMPLETE?"              │
+│     └─► Checks: invariant violations, coverage gaps, blockers   │
+│                                                                 │
+│  2. /design validate       "Is the spec CLEAR?"                 │
+│     └─► Checks: ambiguity, vague terms, implicit assumptions    │
+│                                                                 │
+│  3. /design prp            "Compile to PRP"                     │
+│     └─► Extracts: confidence, thinking level, verbatim content  │
+│                                                                 │
+│  4. /design check          "Is the PRP READY?"                  │
+│     └─► Verifies: extraction completeness, source comparison    │
+│     └─► (Runs automatically after prp)                          │
+│                                                                 │
+│  5. HUMAN REVIEWS          ← YOU approve before implementation  │
+│                                                                 │
+│  6. /design implement      "Generate Ralph steps"               │
+│     └─► Creates: step-NN.sh, test-NN.sh, gate-N.sh             │
+│                                                                 │
+│  7. /design ralph-check    "Do steps match PRP?"                │
+│     └─► Verifies: schema fields, routes, success criteria       │
+│                                                                 │
+│  8. /design run            "Execute with verification"          │
+│     └─► Runs: steps + tests + Playwright verification           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Don't skip steps.** Stress-test catches completeness issues. Validate catches clarity issues. Both must pass before PRP generation.
+
+---
+
 ### /design init {project-name}
 
 Bootstrap a new project with complete Design Ops structure.
@@ -166,6 +202,84 @@ Next steps:
 3. Create specs in docs/design/specs/
 4. Run: /design validate docs/design/specs/your-spec.md
 ```
+
+---
+
+### /design stress-test {spec-file} [--requirements file] [--journeys file]
+
+Check spec COMPLETENESS against domain invariants. **Run this BEFORE validate.**
+
+**Usage:**
+```
+/design stress-test docs/design/specs/feature-spec.md
+/design stress-test specs/api-spec.md --requirements requirements.md
+/design stress-test specs/checkout.md --journeys user-journeys.md
+```
+
+**What It Checks:**
+
+1. **Domain Detection:**
+   - Parses `Domain:` header from spec
+   - Resolves applicable invariants (universal + domain-specific)
+   - Reports total invariant count
+
+2. **Deterministic Coverage Checks:**
+   - Happy path explicitly described
+   - Error/failure cases addressed
+   - Empty/null states handled
+   - External failure modes (timeout, offline, API down)
+   - Concurrency considerations
+   - Limits/boundaries specified
+
+3. **LLM Invariant Analysis:**
+   - Invariant #1 (Ambiguity): Terms without operational definitions
+   - Invariant #4 (No Irreversible Without Recovery): Destructive actions without undo
+   - Invariant #5 (Fail Loudly): Silent failures
+   - Invariant #7 (Validation Executable): Untestable success criteria
+   - Invariant #10 (Degradation Path): Missing fallback strategies
+
+**Execution:**
+```bash
+./enforcement/design-ops-v3.sh stress-test "{spec-file}" [--requirements "{file}"] [--journeys "{file}"] [--quick]
+```
+
+**Output:**
+```
+━━━ Domain Detection ━━━
+  Domains detected: 2 (including universal)
+  Total invariants: 20
+    → Universal: system-invariants.md (1-11)
+    → Domain (consumer product): consumer-product.md (11-15)
+
+━━━ Deterministic Coverage Checks ━━━
+  ✓ Happy path mentioned
+  ✓ Error cases mentioned
+  ✗ External failure modes not addressed
+
+━━━ LLM Deep Analysis ━━━
+Invariant Violations:
+  ✗ Invariant #4: Delete operation has no confirmation dialog
+  ✗ Invariant #7: "Works correctly" is not testable
+
+Missing Coverage:
+  ? Offline mode behavior not specified
+  ? Rate limiting not addressed
+
+Critical Blockers:
+  1. What happens when AIMS API is unavailable?
+  2. Max file size for imports not specified
+
+───────────────────────────────────────────────────────────────
+  Status: REVIEW REQUIRED
+  → Address invariant violations before proceeding to validate
+───────────────────────────────────────────────────────────────
+```
+
+**Pipeline State:**
+
+Findings are saved to `~/.design-ops-state/{spec-name}.state.json` for use by subsequent commands.
+
+**Next step:** `/design validate {spec-file}`
 
 ---
 
@@ -239,7 +353,7 @@ REJECTED - Fix violations before proceeding
 
 ---
 
-### /design prp {spec-file} [--output path] [--template type]
+### /design prp {spec-file} [--output path] (alias: generate)
 
 Generate a Product Requirements Prompt from a validated specification.
 
@@ -248,6 +362,11 @@ Generate a Product Requirements Prompt from a validated specification.
 /design prp specs/feature-spec.md
 /design prp specs/api-spec.md --output PRPs/api-prp.md
 /design prp specs/mobile-app.md --template user-feature
+```
+
+**Note:** The shell script uses `generate` as the command name:
+```bash
+./enforcement/design-ops-v3.sh generate specs/feature.md
 ```
 
 **Template options:**
@@ -319,9 +438,79 @@ Placeholders to fill:
 Next steps:
 1. Open PRPs/my-feature-prp.md
 2. Fill all [FILL_THIS_IN] placeholders
-3. Run: /design prp-check PRPs/my-feature-prp.md
+3. Run: /design check PRPs/my-feature-prp.md
 4. Begin execution with validation gates
 ```
+
+---
+
+### /design check {prp-file}
+
+Verify PRP quality and extraction completeness. **Runs automatically after generate.**
+
+**Usage:**
+```
+/design check PRPs/feature-prp.md
+/design check PRPs/api-prp.md --quick
+```
+
+**What It Checks:**
+
+1. **Domain Detection** (from PRP content)
+
+2. **Source Spec Comparison:**
+   - Extracts `source_spec:` path from PRP meta block
+   - If source spec accessible, compares key content:
+     - Database schema (CREATE TABLE statements)
+     - API endpoints (GET/POST/PUT/DELETE routes)
+     - ASCII wireframes (box-drawing characters)
+     - Error messages
+
+3. **Structural Checks:**
+   - Required sections present (overview, success criteria, timeline, risk, validation)
+   - No unfilled placeholders ([FILL], [TODO], [TBD])
+   - No LLM reasoning artifacts ("let me", "I'll", "here's my")
+
+4. **LLM Readiness Assessment:**
+   - Confidence score sanity check
+   - Extraction completeness (NOT_SPECIFIED_IN_SPEC flags)
+   - Thinking level appropriateness
+   - Appendix content verification
+   - Implementation blockers
+
+**Execution:**
+```bash
+./enforcement/design-ops-v3.sh check "{prp-file}" [--quick]
+```
+
+**Output:**
+```
+━━━ Spec-to-PRP Comparison ━━━
+  ✓ Database schema content preserved
+  ✓ API endpoints preserved
+  ✗ Source has ASCII wireframes but PRP may be missing them
+
+━━━ Deterministic Checks ━━━
+  ✓ overview section found
+  ✓ success criteria section found
+  ✗ Found 2 unfilled placeholders
+
+━━━ LLM Advisory Assessment ━━━
+Summary: PRP is mostly implementation-ready with minor gaps
+
+Blockers (must resolve):
+  ✗ Section 4.2 references "degradation strategy" but none defined
+
+Confidence Assessment:
+  Stated 7.2/10 seems accurate given documented edge cases
+
+───────────────────────────────────────────────────────────────
+  Status: ITEMS TO REVIEW
+  → Fix placeholders, then proceed to implementation
+───────────────────────────────────────────────────────────────
+```
+
+**Next step:** Human review, then `/design implement`
 
 ---
 
@@ -1952,12 +2141,15 @@ When executing commands, resolve the DesignOps root directory as:
 
 **Located at `{DESIGNOPS_ROOT}/enforcement/`:**
 
-| Script | Purpose | Direct Use |
-|--------|---------|------------|
-| `validator.sh` | Invariant checking + CONVENTIONS | `./validator.sh <spec> [--domain <file>]` |
-| `spec-to-prp.sh` | PRP generation + patterns | `./spec-to-prp.sh <spec> [--template <type>]` |
-| `prp-checker.sh` | PRP quality check | `./prp-checker.sh <prp> [--verbose]` |
-| `confidence-calculator.sh` | Calculate confidence score | `./confidence-calculator.sh <prp>` |
+| Script | Purpose | Commands Implemented |
+|--------|---------|---------------------|
+| `design-ops-v3.sh` | **Main pipeline script** | stress-test, validate, generate, check, ralph-check |
+
+**Note:** The following are archived/legacy (functionality now in design-ops-v3.sh):
+- `validator.sh` → use `design-ops-v3.sh validate`
+- `spec-to-prp.sh` → use `design-ops-v3.sh generate`
+- `prp-checker.sh` → use `design-ops-v3.sh check`
+- `confidence-calculator.sh` → called internally by generate
 
 **Located at `{DESIGNOPS_ROOT}/agents/`:**
 
@@ -2052,12 +2244,69 @@ templates:
 
 ### Environment Variables
 
-```bash
-# DESIGNOPS_ROOT is auto-detected from this skill file's location
-# Override only if DesignOps is installed elsewhere:
-# export DESIGNOPS_ROOT="/path/to/DesignOps"
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CLAUDE_MODEL` | `claude-sonnet-4-20250514` | Model for all LLM calls |
+| `PIPELINE_STATE_DIR` | `~/.design-ops-state` | Directory for inter-command state files |
+| `DESIGN_OPS_BASE` | `~/.claude/plugins/design-ops` | Root directory for invariants, domains, templates |
+| `DESIGNOPS_STRICT` | `0` | Set to `1` to treat warnings as errors |
 
-DESIGNOPS_STRICT=0  # Set to 1 to treat warnings as errors
+**Example: Use a different model:**
+```bash
+CLAUDE_MODEL=claude-opus-4-20250514 ./enforcement/design-ops-v3.sh generate spec.md
+```
+
+**Example: Custom state directory:**
+```bash
+PIPELINE_STATE_DIR=/tmp/design-ops ./enforcement/design-ops-v3.sh stress-test spec.md
+```
+
+---
+
+### Pipeline State
+
+Commands share findings via JSON state files for continuity:
+
+**Location:** `~/.design-ops-state/{spec-basename}.state.json`
+
+**How it works:**
+```
+stress-test  →  Saves: invariant_violations, missing_coverage, critical_blockers
+     ↓
+validate     →  Saves: ambiguity_flags, implicit_assumptions
+     ↓
+generate     →  Reads previous findings (influences confidence calculation)
+     ↓
+check        →  Reads all previous findings for context
+```
+
+**State file structure:**
+```json
+{
+  "stress-test": {
+    "timestamp": "2026-01-21T10:30:00Z",
+    "findings": {
+      "invariant_violations": ["#4: delete without undo"],
+      "critical_blockers": ["Max file size not specified"]
+    }
+  },
+  "validate": {
+    "timestamp": "2026-01-21T10:35:00Z",
+    "findings": {
+      "ambiguity_flags": ["'handle errors properly' - what is properly?"]
+    }
+  }
+}
+```
+
+**Clear state for a spec:**
+```bash
+rm ~/.design-ops-state/my-spec.state.json
+```
+
+**Clear all state:**
+```bash
+rm -rf ~/.design-ops-state/
 ```
 
 ---
