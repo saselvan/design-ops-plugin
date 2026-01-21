@@ -846,7 +846,29 @@ generate_prp() {
     local spec_name
     spec_name=$(basename "$spec_file" .md)
 
+    # Calculate next PRP ID (increment based on existing PRPs)
+    local today
+    today=$(date +%Y-%m-%d)
+    local prp_dir
+    prp_dir=$(dirname "$output_file")
+
+    local seq_num=1
+    if [[ -d "$prp_dir" ]]; then
+        # Find highest sequence number for today's PRPs
+        local existing_max
+        existing_max=$(grep -rh "prp_id: PRP-$today-" "$prp_dir"/*.md 2>/dev/null | \
+            grep -oE "PRP-$today-[0-9]+" | \
+            sed "s/PRP-$today-//" | \
+            sort -n | tail -1)
+        if [[ -n "$existing_max" ]]; then
+            seq_num=$((existing_max + 1))
+        fi
+    fi
+    local prp_id
+    prp_id=$(printf "PRP-%s-%03d" "$today" "$seq_num")
+
     echo -e "${BLUE}━━━ Generating PRP (2026 Best Practices) ━━━${NC}"
+    echo -e "  PRP ID: ${CYAN}$prp_id${NC}"
 
     # Step 1: Parse domains and resolve invariants
     echo -e "${CYAN}Analyzing spec domains...${NC}"
@@ -923,7 +945,7 @@ DOMAIN & INVARIANTS (reference paths only):
 $invariant_refs
 
 PRE-CALCULATED VALUES (use these directly in the PRP):
-- PRP ID: PRP-$(date +%Y-%m-%d)-001
+- PRP ID: $prp_id
 - Source Spec: $spec_file
 - Validation Date: $(date +%Y-%m-%d)
 - Confidence Score: $confidence_score/10
@@ -988,7 +1010,7 @@ PRP STRUCTURE TO OUTPUT:
 
 ## Meta
 \`\`\`yaml
-prp_id: PRP-$(date +%Y-%m-%d)-001
+prp_id: $prp_id
 source_spec: $spec_file
 validation_status: PASSED
 validated_date: $(date +%Y-%m-%d)
