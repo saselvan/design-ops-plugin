@@ -36,6 +36,10 @@ INVARIANTS_DIR="$DESIGN_OPS_BASE"
 DOMAINS_DIR="$DESIGN_OPS_BASE/domains"
 TEMPLATES_DIR="$DESIGN_OPS_BASE/templates"
 
+# Model configuration (can be overridden via environment variable)
+# Options: claude-sonnet-4-20250514, claude-opus-4-20250514, etc.
+CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
+
 # Domain mapping function (bash 3.x compatible)
 # Returns: file:start-end or empty if not found
 get_domain_mapping() {
@@ -327,7 +331,7 @@ Before responding:
 $prompt"
     fi
 
-    result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print 2>/dev/null)
+    result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print 2>/dev/null)
 
     track_cost "$prompt" "$result"
     echo "$result"
@@ -544,7 +548,7 @@ If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It'
     fi
 
     local raw_result result
-    raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
+    raw_result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print --output-format json --json-schema "$schema" 2>/dev/null)
 
     # Extract structured_output from the wrapper JSON
     result=$(echo "$raw_result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('structured_output',{})))" 2>/dev/null)
@@ -1317,7 +1321,7 @@ Provide:
 If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It's better to express uncertainty than to guess."
 
         local raw_result result
-        raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
+        raw_result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print --output-format json --json-schema "$schema" 2>/dev/null)
 
         # Extract structured_output from the wrapper JSON
         result=$(echo "$raw_result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('structured_output',{})))" 2>/dev/null)
@@ -1914,7 +1918,7 @@ Analyze whether the implementation follows the PRP. Provide:
 If you are uncertain about any assessment, flag it with [UNCERTAIN: reason]. It's better to express uncertainty than to guess."
 
     local raw_result result
-    raw_result=$(echo "$prompt" | claude --model claude-sonnet-4-20250514 --print --output-format json --json-schema "$schema" 2>/dev/null)
+    raw_result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print --output-format json --json-schema "$schema" 2>/dev/null)
 
     result=$(echo "$raw_result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('structured_output',{})))" 2>/dev/null)
 
