@@ -184,7 +184,8 @@ display_dashboard() {
 
     declare -a spec_data
 
-    for result_file in "$RESULTS_DIR"/*.json 2>/dev/null; do
+    shopt -s nullglob
+    for result_file in "$RESULTS_DIR"/*.json; do
         [[ -f "$result_file" ]] || continue
 
         local spec_name=$(basename "$result_file" .json)

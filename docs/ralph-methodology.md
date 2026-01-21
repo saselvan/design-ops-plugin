@@ -355,6 +355,67 @@ Spec → Stress Test → Validate → Generate PRP → Ralph Steps → Gates →
 
 ---
 
-*Version: 1.0*
+## Spec Delta Mechanism
+
+When implementation reveals spec gaps, follow this process:
+
+### 1. Document the Gap
+```markdown
+**Gap:** [What was missing]
+**Root cause:** [Why it was missed]
+**Impact:** [What broke or was missing in implementation]
+```
+
+### 2. Update the Spec
+- Add missing section to spec (e.g., F0: Entry Points)
+- Increment version number
+- Add changelog entry
+
+### 3. Generate Delta PRP
+- Create mini-PRP for just the missing feature
+- Reference original PRP for context
+- Include only the new steps needed
+
+### 4. Generate Delta Steps
+- Add new ralph steps (e.g., step-34, step-35)
+- Include tests for new functionality
+- Don't modify existing passing steps
+
+### 5. Update Learnings
+- Add to project's SPEC-CONVENTIONS.md
+- Capture pattern to prevent future gaps
+
+### Common Spec Gaps
+
+| Gap Type | Symptom | Prevention |
+|----------|---------|------------|
+| Missing entry points | "How does user get here?" | Always start with F0: Entry Points |
+| State-blind UI | UI doesn't change based on auth/data | Document all UI states |
+| Implicit navigation | Journey assumes user knows URLs | Trace full click path |
+| Error path gaps | Only happy path documented | Ask "what if X fails?" |
+| **UI shell without data** | List shows empty after import | Require "Data Source" in spec |
+| **Schema type mismatch** | Insert fails with type error | Validate field types match schema |
+| **Silent async failures** | Page hangs forever | Require timeout + error UI |
+
+### Critical Test Requirements
+
+**Every list page test MUST verify:**
+1. Empty state renders when no data
+2. Data fetching actually executes (not just UI)
+3. After insert: navigate back → see inserted data
+
+**Every async operation MUST have:**
+1. Timeout (max 10 seconds for user-facing)
+2. Error state UI (not just loading)
+3. Console logging for debugging
+
+**Every insert operation MUST:**
+1. Match schema field types (UUID vs string)
+2. Create parent records before FK inserts
+3. Return inserted ID for verification
+
+---
+
+*Version: 1.1*
 *Last updated: 2026-01-20*
 *Based on: Anthropic, AWS, Addy Osmani, Armin Ronacher research*

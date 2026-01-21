@@ -216,6 +216,32 @@ system-invariants.md          ← You are here (Universal Core)
 
 ---
 
+### 11. Accessibility is Non-Negotiable
+
+**Principle**: All user interfaces must be usable by everyone
+
+**Violation**: UI without accessibility considerations, inaccessible interactions
+
+**Examples**:
+- ❌ "Add a button to submit"
+- ❌ "Show error in red"
+- ❌ "Click to expand details"
+- ✅ "Submit button: keyboard_focusable + aria_label + min_touch_target_44px"
+- ✅ "Error display: red_text + icon_indicator + aria_live_announce + contrast_ratio_4.5:1"
+- ✅ "Expandable section: keyboard_enter_to_toggle + aria_expanded_state + screen_reader_announce"
+
+**Standards**:
+- WCAG 2.1 AA as baseline
+- Keyboard navigation for all interactions
+- Screen reader compatibility (semantic HTML, ARIA labels)
+- Color contrast ratio ≥ 4.5:1 for text
+- Touch targets ≥ 44x44px on mobile
+- No information conveyed by color alone
+
+**Enforcement**: UI components must specify: keyboard_access + screen_reader_support + contrast_compliance. UI without accessibility declaration → REJECT
+
+---
+
 ## How Invariants Are Used
 
 | Artifact | Invariant Role |
@@ -304,9 +330,10 @@ New invariants come from Spec Deltas only. Process:
 | 8 | Cost Boundaries Must Be Explicit | Limits on API/storage/money |
 | 9 | Blast Radius Must Be Declared | Write ops declare affected scope |
 | 10 | Degradation Path Must Exist | External deps have fallbacks |
+| 11 | Accessibility is Non-Negotiable | WCAG 2.1 AA, keyboard nav, screen readers |
 
 ---
 
-*Last updated: 2026-01-19*
-*Core invariants: 10*
+*Last updated: 2026-01-20*
+*Core invariants: 11*
 *Domain invariants: See domain files*
