@@ -1520,6 +1520,25 @@ cmd_check() {
     domain_count=$(echo "$domain_result" | grep "^DOMAIN_COUNT=" | cut -d= -f2)
 
     echo -e "  Domains: ${CYAN}$((domain_count + 1))${NC} | Invariants: ${CYAN}$total_invariants${NC}"
+
+    # ━━━ Source Spec Detection ━━━
+    local source_spec=""
+    local source_spec_content=""
+
+    # Try to extract source_spec from PRP meta block
+    source_spec=$(echo "$content" | grep -E "^source_spec:" | head -1 | sed 's/source_spec://' | xargs)
+
+    if [[ -z "$source_spec" ]]; then
+        # Try alternative format: Source Spec Reference in appendix
+        source_spec=$(echo "$content" | grep -E "Spec Path:" | head -1 | sed 's/.*Spec Path://' | xargs)
+    fi
+
+    if [[ -n "$source_spec" && -f "$source_spec" ]]; then
+        echo -e "  Source spec: ${CYAN}$source_spec${NC}"
+        source_spec_content=$(cat "$source_spec")
+    else
+        echo -e "  Source spec: ${YELLOW}Not found or not accessible${NC}"
+    fi
     echo ""
 
     local struct_output struct_grade
@@ -1530,6 +1549,70 @@ cmd_check() {
     local llm_grade="SKIPPED"
     if [[ "$quick" != "true" ]]; then
         echo ""
+
+        # If we have the source spec, do a comparison check
+        if [[ -n "$source_spec_content" ]]; then
+            echo -e "${BLUE}━━━ Spec-to-PRP Comparison ━━━${NC}"
+            echo -e "${CYAN}Checking if PRP preserved key spec content...${NC}"
+            echo ""
+
+            # Quick deterministic checks for key content preservation
+            local preserved=0
+            local missing=0
+
+            # Check for SQL/schema preservation
+            if echo "$source_spec_content" | grep -qiE "CREATE TABLE|ALTER TABLE|SQL"; then
+                if echo "$content" | grep -qiE "CREATE TABLE|ALTER TABLE|Database Schema"; then
+                    echo -e "  ${GREEN}✓${NC} Database schema content preserved"
+                    ((preserved++))
+                else
+                    echo -e "  ${RED}✗${NC} Source has SQL/schema but PRP may be missing it"
+                    ((missing++))
+                fi
+            fi
+
+            # Check for API endpoint preservation
+            if echo "$source_spec_content" | grep -qiE "GET /|POST /|PUT /|DELETE /|/api/"; then
+                if echo "$content" | grep -qiE "GET /|POST /|PUT /|DELETE /|/api/|API Spec"; then
+                    echo -e "  ${GREEN}✓${NC} API endpoints preserved"
+                    ((preserved++))
+                else
+                    echo -e "  ${RED}✗${NC} Source has API endpoints but PRP may be missing them"
+                    ((missing++))
+                fi
+            fi
+
+            # Check for wireframe/ASCII art preservation
+            if echo "$source_spec_content" | grep -qE "┌|└|├|│|─"; then
+                if echo "$content" | grep -qE "┌|└|├|│|─"; then
+                    echo -e "  ${GREEN}✓${NC} ASCII wireframes preserved"
+                    ((preserved++))
+                else
+                    echo -e "  ${RED}✗${NC} Source has ASCII wireframes but PRP may be missing them"
+                    ((missing++))
+                fi
+            fi
+
+            # Check for error messages preservation
+            if echo "$source_spec_content" | grep -qiE "error message|Error:|\".*not found\""; then
+                if echo "$content" | grep -qiE "error message|Error Catalog|\".*not found\""; then
+                    echo -e "  ${GREEN}✓${NC} Error messages preserved"
+                    ((preserved++))
+                else
+                    echo -e "  ${YELLOW}?${NC} Source has error messages - verify PRP includes them"
+                    ((missing++))
+                fi
+            fi
+
+            echo ""
+            if [[ $missing -gt 0 ]]; then
+                echo -e "  ${YELLOW}Found $missing potential extraction gaps - review LLM assessment below${NC}"
+            else
+                echo -e "  ${GREEN}Key content appears preserved${NC}"
+            fi
+            echo ""
+        fi
+
         local llm_output
         llm_output=$(get_llm_assessment "$file" "prp")
         echo "$llm_output" | sed '$d'
