@@ -843,7 +843,7 @@ The Ralph Methodology provides atomic, test-verified implementation of PRPs. See
 
 ### /design implement {prp-file} [--output dir]
 
-Generate Ralph steps from an approved PRP.
+Generate Ralph steps from an approved PRP using **structured extraction** (not freeform generation).
 
 **Usage:**
 ```
@@ -851,31 +851,277 @@ Generate Ralph steps from an approved PRP.
 /design implement PRPs/feature-prp.md --output ./app/ralph-steps
 ```
 
+**CRITICAL: Extraction, Not Generation**
+
+The implement command must EXTRACT from PRP, not invent. This prevents drift between PRP and implementation.
+
+**Extraction Mapping (MUST FOLLOW):**
+
+| PRP Section | → | Ralph Output | Extraction Rule |
+|-------------|---|--------------|-----------------|
+| Meta: confidence_score | → | Step headers | Include score + derivation |
+| Meta: thinking_level | → | Step headers | Flag high-attention sections |
+| Timeline phases | → | Gate boundaries | One gate per phase |
+| Phase deliverables | → | step-NN.sh objectives | **VERBATIM** - one step per deliverable |
+| Success criteria table | → | test-NN.sh assertions | **VERBATIM** as test checks |
+| Appendix: Validation commands | → | test-NN.sh commands | **COPY EXACTLY** |
+| Appendix: Database schema | → | step-NN.sh SQL | **VERBATIM** - must match |
+| Appendix: UI wireframes | → | step-NN.sh JSX structure | Preserve layout |
+| Appendix: Error messages | → | step-NN.sh error handling | **COPY text exactly** |
+| Appendix: API endpoints | → | step-NN.sh routes | **VERBATIM** paths + methods |
+| Domain invariants | → | Step + test headers | Reference by number |
+
 **Execution:**
 
-1. **Parse PRP structure:**
-   - Extract timeline phases
-   - Extract deliverables per phase
-   - Extract validation criteria
-   - Extract success metrics
+1. **Parse PRP metadata:**
+   ```
+   Extract from PRP Meta section:
+   - prp_id: PRP-2026-01-21-001
+   - confidence_score: 7.2/10
+   - thinking_level: Think Hard
+   - domain: Consumer Product + Integration
+   - invariants: Universal (1-11) + Domain-specific
+   ```
 
-2. **Generate atomic steps:**
-   - One step per deliverable
-   - Each step has single objective
-   - Include init check (verify build not broken)
+2. **Extract phase structure:**
+   ```
+   For each PRP phase (Phase 1, 2, 3...):
+   - List all deliverables (F0.1, F1.2, F2.4...)
+   - List success criteria (SC-1.1, SC-1.2...)
+   - Note performance targets
+   - Note validation commands
+   ```
 
-3. **Generate test scripts:**
-   - Automated checks (files exist, build passes)
-   - Playwright MCP verification instructions
-   - Accessibility checks (Invariant #11)
+3. **Generate step scripts with headers:**
 
-4. **Generate gates:**
-   - One gate per PRP phase
-   - Aggregates phase success criteria
-   - Performance targets from PRP
+   **REQUIRED STEP HEADER FORMAT:**
+   ```bash
+   #!/bin/bash
+   # ==============================================================================
+   # Step NN: [Deliverable title from PRP - VERBATIM]
+   # ==============================================================================
+   # PRP: [prp_id]
+   # PRP Phase: [Phase N.M - Phase title]
+   # PRP Deliverable: [F0.1 - Deliverable description]
+   #
+   # Invariants Applied:
+   #   - #1 (Ambiguity): [specific application]
+   #   - #7 (Validation): [specific application]
+   #   - #11 (Accessibility): [specific application]
+   #
+   # Thinking Level: [Normal|Think|Think Hard|Ultrathink]
+   # High-Attention Sections: [list if Think Hard or Ultrathink]
+   #
+   # Confidence: [X.X/10] ([High|Medium|Low])
+   # Confidence Notes: [why this score, derived from PRP section]
+   # ==============================================================================
 
-5. **Generate coverage matrix:**
-   - PRP-COVERAGE.md mapping deliverables to steps
+   # === OBJECTIVE (from PRP deliverable - VERBATIM) ===
+   # [Copy deliverable description exactly from PRP]
+
+   # === ACCEPTANCE CRITERIA (from PRP success criteria - VERBATIM) ===
+   # SC-N.1: [criterion text]
+   # SC-N.2: [criterion text]
+
+   # === IMPLEMENTATION ===
+   ```
+
+4. **Generate test scripts with PRP traceability:**
+
+   **REQUIRED TEST FORMAT:**
+   ```bash
+   #!/bin/bash
+   # ==============================================================================
+   # Test NN: [Same title as step]
+   # ==============================================================================
+   # PRP: [prp_id]
+   # PRP Phase: [Phase N.M]
+   # Success Criteria Tested: SC-N.1, SC-N.2, SC-N.3
+   # Invariants Verified: #7, #11
+   # ==============================================================================
+
+   source "$(dirname "$0")/test-utils.sh"
+
+   # === PRP SUCCESS CRITERIA (VERBATIM from PRP Section 2) ===
+   # SC-N.1: [exact text from PRP]
+   # SC-N.2: [exact text from PRP]
+   # === END PRP CRITERIA ===
+
+   # === FILE EXISTENCE CHECKS ===
+   check_file "src/app/styles/page.tsx"
+   check_file "src/components/styles/style-list.tsx"
+
+   # === CONTENT CHECKS (derived from success criteria) ===
+   check "grep -q 'Style Library' src/app/styles/page.tsx" "SC-N.1: Styles heading"
+   check "grep -q 'No styles yet' src/app/styles/page.tsx" "SC-N.2: Empty state"
+
+   # === PRP VALIDATION COMMANDS (VERBATIM from PRP Appendix) ===
+   # Copied from PRP Section 8 - Validation Commands
+   check "npm run build" "Build passes"
+   check "npx tsc --noEmit" "TypeScript strict mode"
+   # === END VERBATIM ===
+
+   # === INVARIANT #11: Accessibility Audit ===
+   if command -v axe &> /dev/null; then
+     check "axe http://localhost:3000/styles --exit" "Accessibility audit"
+   else
+     echo "  [SKIP] axe-cli not installed"
+   fi
+
+   # === PLAYWRIGHT VERIFICATION ===
+   cat << 'PLAYWRIGHT_VERIFY'
+   {
+     "route": "/styles",
+     "prp_phase": "1.3",
+     "prp_criteria": ["SC-1.3.1", "SC-1.3.2"],
+     "invariants": [11],
+     "checks": [
+       {
+         "type": "heading",
+         "level": 1,
+         "text": "Style Library",
+         "prp_ref": "SC-1.3.1",
+         "comment": "Copied from PRP Success Criteria table"
+       },
+       {
+         "type": "text",
+         "text": "No styles yet",
+         "prp_ref": "SC-1.3.2",
+         "comment": "Empty state from PRP UI wireframe"
+       },
+       {
+         "type": "a11y",
+         "standard": "wcag21aa",
+         "fail_on": ["critical", "serious"],
+         "invariant_ref": 11,
+         "comment": "Invariant #11 requires automated accessibility audit"
+       }
+     ]
+   }
+   PLAYWRIGHT_VERIFY
+
+   report_results
+   ```
+
+5. **Generate gate scripts with phase aggregation:**
+
+   **REQUIRED GATE FORMAT:**
+   ```bash
+   #!/bin/bash
+   # ==============================================================================
+   # Gate N: [Phase title from PRP]
+   # ==============================================================================
+   # PRP: [prp_id]
+   # PRP Phase: [Phase N - title]
+   # Steps Covered: step-01.sh through step-NN.sh
+   # Success Criteria Aggregated: SC-N.1 through SC-N.M
+   # Invariants Verified: #1, #7, #11
+   # Performance Targets: [from PRP]
+   # ==============================================================================
+
+   echo "═══════════════════════════════════════════════════════════"
+   echo "  GATE N: [Phase title]"
+   echo "═══════════════════════════════════════════════════════════"
+
+   FAIL=0
+
+   # === RUN ALL PHASE TESTS ===
+   for test in test-01.sh test-02.sh ... test-NN.sh; do
+     echo "Running $test..."
+     ./$test || FAIL=$((FAIL + 1))
+   done
+
+   # === PHASE SUCCESS CRITERIA (from PRP Section 2) ===
+   echo ""
+   echo "Checking phase success criteria..."
+
+   # SC-N.1: [exact text from PRP]
+   check_criterion "npm run build" "SC-N.1: Build successful"
+
+   # SC-N.2: [exact text from PRP]
+   check_criterion "npx tsc --noEmit" "SC-N.2: TypeScript passes"
+
+   # SC-N.3: [exact text from PRP]
+   check_criterion "test -f src/app/styles/page.tsx" "SC-N.3: Style page exists"
+
+   # === PERFORMANCE TARGETS (from PRP) ===
+   echo ""
+   echo "Checking performance targets..."
+
+   # PRP Target: Build <30s
+   BUILD_START=$(date +%s)
+   npm run build > /dev/null 2>&1
+   BUILD_END=$(date +%s)
+   BUILD_TIME=$((BUILD_END - BUILD_START))
+
+   if [ $BUILD_TIME -lt 30 ]; then
+     echo "  ✓ Build time: ${BUILD_TIME}s (target: <30s)"
+   else
+     echo "  ✗ Build time: ${BUILD_TIME}s (target: <30s)"
+     FAIL=$((FAIL + 1))
+   fi
+
+   # === INVARIANT #11: Full Accessibility Audit ===
+   echo ""
+   echo "Running accessibility audit (Invariant #11)..."
+   if command -v axe &> /dev/null; then
+     axe http://localhost:3000 --exit || FAIL=$((FAIL + 1))
+   fi
+
+   # === GATE RESULT ===
+   echo ""
+   echo "═══════════════════════════════════════════════════════════"
+   if [ $FAIL -eq 0 ]; then
+     echo "  GATE N: PASSED"
+     echo "  Proceed to Phase N+1"
+   else
+     echo "  GATE N: FAILED ($FAIL issues)"
+     echo "  Fix issues before proceeding"
+     exit 1
+   fi
+   echo "═══════════════════════════════════════════════════════════"
+   ```
+
+6. **Generate PRP-COVERAGE.md with full traceability:**
+
+   ```markdown
+   # PRP Coverage Matrix
+
+   **PRP:** [prp_id]
+   **Generated:** [date]
+   **Confidence:** [X.X/10]
+   **Thinking Level:** [level]
+
+   ## Deliverable → Step Mapping
+
+   | PRP Deliverable | Step | Test | Gate | Success Criteria |
+   |-----------------|------|------|------|------------------|
+   | F0.1 Sidebar nav | step-01.sh | test-01.sh | gate-1 | SC-0.1.1, SC-0.1.2 |
+   | F0.2 Routes | step-02.sh | test-02.sh | gate-1 | SC-0.2.1 |
+   | F1.1 Season DB | step-04.sh | test-04.sh | gate-2 | SC-1.1.1, SC-1.1.2 |
+
+   ## Success Criteria → Test Mapping
+
+   | Criterion | Test | Check | Status |
+   |-----------|------|-------|--------|
+   | SC-0.1.1: Sidebar shows LIBRARY section | test-01.sh | grep 'LIBRARY' | ○ |
+   | SC-0.1.2: Sidebar shows SEASON section | test-01.sh | grep 'SEASON' | ○ |
+
+   ## Invariant Coverage
+
+   | Invariant | Applied In | Verification |
+   |-----------|------------|--------------|
+   | #1 Ambiguity | All steps | PRP criteria verbatim |
+   | #7 Validation | All tests | Executable checks |
+   | #11 Accessibility | All UI tests | axe-core audit |
+
+   ## Schema Traceability
+
+   | PRP Schema (Appendix B) | Step | Verification |
+   |-------------------------|------|--------------|
+   | seasons.code (TEXT UNIQUE) | step-04.sh | test-04.sh grep |
+   | buyers.company_name | step-10.sh | test-10.sh grep |
+   ```
 
 **Output:**
 ```
@@ -883,16 +1129,32 @@ Generated Ralph implementation:
 ├── ralph.sh                    # Runner script
 ├── ralph-results.json          # Progress tracker
 └── ralph-steps/
-    ├── step-01.sh ... step-NN.sh
-    ├── test-01.sh ... test-NN.sh
-    ├── gate-1.sh ... gate-N.sh
-    └── PRP-COVERAGE.md
+    ├── step-01.sh ... step-NN.sh  (with invariant headers)
+    ├── test-01.sh ... test-NN.sh  (with PRP verbatim sections)
+    ├── gate-1.sh ... gate-N.sh    (with phase aggregation)
+    └── PRP-COVERAGE.md            (full traceability)
 
 Total: NN steps, N gates
 Coverage: 100% of PRP deliverables
+Invariants: All referenced in headers
+PRP Criteria: All mapped to tests
 
 Next: ./ralph.sh 1  (run step 1)
 ```
+
+**Quality Checks Before Output:**
+
+Before generating output, verify:
+1. ☐ Every PRP deliverable has exactly one step
+2. ☐ Every success criterion appears in a test with `prp_ref`
+3. ☐ Validation commands copied VERBATIM from PRP
+4. ☐ Schema field names match PRP Appendix B exactly
+5. ☐ Invariant numbers in all step/test headers
+6. ☐ Thinking level propagated to steps
+7. ☐ PLAYWRIGHT_VERIFY has prp_criteria references
+8. ☐ Gates aggregate all phase success criteria
+9. ☐ Performance targets from PRP in gates
+10. ☐ PRP-COVERAGE.md has complete traceability
 
 ---
 
