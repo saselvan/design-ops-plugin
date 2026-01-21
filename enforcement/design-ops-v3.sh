@@ -1668,49 +1668,80 @@ check_ralph_deterministic() {
 
     echo -e "${BLUE}━━━ Deterministic Checks ━━━${NC}"
 
-    # 1. Extract schema definitions from PRP
+    # 1. Extract schema definitions from PRP (generic - works with any tables)
     echo -e "${CYAN}Extracting PRP schema definitions...${NC}"
 
-    # Check for Fabrics table definition in PRP
-    if echo "$prp_content" | grep -qiE "fabric.*template|fabrics.*column"; then
-        local fabric_fields
-        fabric_fields=$(echo "$prp_content" | grep -A 10 -iE "fabric.*template" | grep -E '^\| [a-z_]+ \|' | awk -F'|' '{print $2}' | tr -d ' ' | tr '\n' ',')
-        echo -e "  ${GREEN}✓${NC} Fabrics schema found: ${fabric_fields%,}"
+    # Extract CREATE TABLE statements from PRP
+    local tables_found=0
+    local prp_columns=()
 
-        # Check Ralph steps for schema mismatches
-        if [[ -d "$steps_dir" ]]; then
-            local violations=""
+    # Look for CREATE TABLE statements
+    while IFS= read -r table_match; do
+        if [[ -n "$table_match" ]]; then
+            ((tables_found++))
+            local table_name
+            table_name=$(echo "$table_match" | grep -oE "CREATE TABLE [a-z_]+" | awk '{print $3}')
+            echo -e "  ${GREEN}✓${NC} Found table: $table_name"
 
-            # Check for fabric_id (should be aims_code per most PRPs)
-            if echo "$prp_content" | grep -qiE "aims_code"; then
-                if grep -rl "fabric_id" "$steps_dir"/*.sh 2>/dev/null | head -1 >/dev/null; then
-                    violations+="fabric_id→aims_code "
-                    issues+=("Steps use 'fabric_id' but PRP defines 'aims_code'")
-                fi
-            fi
-
-            # Check for description (should be fabric_name per most PRPs)
-            if echo "$prp_content" | grep -qiE "fabric_name"; then
-                if grep -rlE "description\s+TEXT|description:\s*string" "$steps_dir"/*.sh 2>/dev/null | head -1 >/dev/null; then
-                    violations+="description→fabric_name "
-                    issues+=("Steps use 'description' but PRP defines 'fabric_name'")
-                fi
-            fi
-
-            # Check for composition (should be fabric_type per most PRPs)
-            if echo "$prp_content" | grep -qiE "fabric_type"; then
-                if grep -rlE "composition\s+TEXT|composition:\s*string" "$steps_dir"/*.sh 2>/dev/null | head -1 >/dev/null; then
-                    violations+="composition→fabric_type "
-                    issues+=("Steps use 'composition' but PRP defines 'fabric_type'")
-                fi
-            fi
-
-            if [[ -z "$violations" ]]; then
-                echo -e "  ${GREEN}✓${NC} Schema field names match PRP"
-            fi
+            # Extract column names from the CREATE TABLE block
+            local cols
+            cols=$(echo "$prp_content" | sed -n "/$table_match/,/);/p" | grep -E "^\s+[a-z_]+" | awk '{print $1}' | tr '\n' ' ')
+            [[ -n "$cols" ]] && prp_columns+=("$table_name:$cols")
         fi
-    else
-        warnings+=("No explicit fabrics schema found in PRP")
+    done < <(echo "$prp_content" | grep -E "CREATE TABLE [a-z_]+" | head -10)
+
+    # Also check for markdown table schemas (| column | type | format)
+    if echo "$prp_content" | grep -qE "^\|.*Column.*\|.*Type.*\|"; then
+        echo -e "  ${GREEN}✓${NC} Found markdown schema tables"
+        ((tables_found++))
+    fi
+
+    # Also check for column mapping tables
+    if echo "$prp_content" | grep -qiE "column.*mapping|import.*column"; then
+        echo -e "  ${GREEN}✓${NC} Found column mapping definitions"
+        ((tables_found++))
+    fi
+
+    if [[ $tables_found -eq 0 ]]; then
+        warnings+=("No explicit schema definitions found in PRP")
+    fi
+
+    # Check Ralph steps for schema consistency (generic check)
+    if [[ -d "$steps_dir" ]] && [[ $tables_found -gt 0 ]]; then
+        echo ""
+        echo -e "${CYAN}Checking schema consistency with steps...${NC}"
+
+        # Extract column names mentioned in PRP (from CREATE TABLE or markdown tables)
+        local prp_fields
+        prp_fields=$(echo "$prp_content" | grep -oE '\b[a-z]+_[a-z_]+\b' | sort -u | tr '\n' ' ')
+
+        # Extract column names mentioned in steps
+        local step_fields
+        step_fields=$(cat "$steps_dir"/*.sh 2>/dev/null | grep -oE '\b[a-z]+_[a-z_]+\b' | sort -u | tr '\n' ' ')
+
+        # Find fields in steps but not in PRP (potential mismatches)
+        local mismatches=0
+        for field in $step_fields; do
+            # Skip common non-schema words
+            [[ "$field" =~ ^(npm_run|git_add|echo_e|set_e|local_|dev_null)$ ]] && continue
+
+            # Check if it looks like a database field and isn't in PRP
+            if [[ "$field" =~ _id$|_name$|_type$|_code$|_date$|_at$ ]]; then
+                if ! echo "$prp_fields" | grep -qw "$field"; then
+                    # Only warn if it's a likely schema field
+                    if echo "$prp_content" | grep -qiE "schema|table|column"; then
+                        ((mismatches++))
+                        [[ $mismatches -le 3 ]] && warnings+=("Field '$field' in steps but not found in PRP schema")
+                    fi
+                fi
+            fi
+        done
+
+        if [[ $mismatches -eq 0 ]]; then
+            echo -e "  ${GREEN}✓${NC} No obvious schema mismatches detected"
+        else
+            echo -e "  ${YELLOW}!${NC} Found $mismatches potential field name mismatches"
+        fi
     fi
 
     # 2. Check for route definitions
