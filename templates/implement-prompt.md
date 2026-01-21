@@ -23,6 +23,48 @@ invariants: {will be filled}
 prp_hash: {first 7 chars of md5 hash}
 ```
 
+## CODEBASE PRE-SCAN (Required Before Path Generation)
+
+Before generating ANY file paths, scan the target codebase to detect existing patterns:
+
+### 1. Route Group Detection
+```bash
+# Check for Next.js route groups like (dashboard), (auth), (marketing)
+ls -d src/app/*/ 2>/dev/null | grep -E '\([^)]+\)' || echo "No route groups found"
+```
+
+If route groups exist (e.g., `(dashboard)`), ALL new page routes must be placed inside the appropriate group:
+- ❌ `src/app/seasons/page.tsx` - Wrong if dashboard exists
+- ✅ `src/app/(dashboard)/seasons/page.tsx` - Correct
+
+### 2. Existing Pattern Detection
+```bash
+# Check existing page patterns for imports, hooks, styling
+head -30 src/app/**/page.tsx 2>/dev/null | head -100
+```
+
+New pages should follow the same patterns for:
+- Import style (absolute vs relative)
+- Auth hooks (`useAuth`, `useRequireAuth`, etc.)
+- UI component imports (`@/components/ui/*`)
+- Data fetching patterns (`querySupabase`, hooks, server components)
+
+### 3. Database Client Pattern
+```bash
+# Check how existing code accesses Supabase
+grep -r "from.*supabase" src/lib/ src/app/ 2>/dev/null | head -10
+```
+
+### Pre-Scan Output Format
+Include detected patterns in RALPH-GENERATION-LOG.md:
+```markdown
+## Codebase Patterns Detected
+- Route groups: (dashboard), (auth)
+- Auth pattern: useRequireAuth({ requireAdmin: true })
+- Data fetching: querySupabase<T>() helper
+- UI library: shadcn/ui components from @/components/ui
+```
+
 ## EXTRACTION MAP
 
 | PRP Section | → | Ralph Output | Extraction Rule |
@@ -123,6 +165,15 @@ npm run build > /dev/null 2>&1 || { echo "Build broken before step - fix first";
 # === IMPLEMENTATION ===
 # {Implementation instructions for Claude to follow}
 # Reference specific files, patterns, and PRP appendices
+#
+# IMPORTANT - SQL VERBATIM RULE:
+# When copying SQL from PRP Appendix B, copy EXACTLY as written.
+# DO NOT add:
+#   - IF NOT EXISTS clauses (breaks test grep patterns)
+#   - Additional indexes not in spec
+#   - Modified column names, types, or constraints
+#   - "Helpful" safety improvements
+# The tests verify EXACT SQL patterns from the PRP.
 
 # === VERIFICATION HINT ===
 # After implementation, run: ./test-{NN}.sh
@@ -157,10 +208,10 @@ FAIL=0
 check() {
     if eval "$1"; then
         echo "  [PASS] $2"
-        ((PASS++))
+        PASS=$((PASS + 1))  # Note: ((PASS++)) returns exit 1 when PASS=0, breaks set -e
     else
         echo "  [FAIL] $2"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 
@@ -306,7 +357,7 @@ gate_check() {
         echo "  [PASS] $2"
     else
         echo "  [FAIL] $2"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 
@@ -319,7 +370,7 @@ for test in test-{start}.sh test-{...}.sh test-{end}.sh; do
         echo "    [PASS] $test"
     else
         echo "    [FAIL] $test"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 done
 
@@ -344,7 +395,7 @@ if [[ $BUILD_TIME -lt 30 ]]; then
     echo "  [PASS] Build time: ${BUILD_TIME}s (target: <30s)"
 else
     echo "  [FAIL] Build time: ${BUILD_TIME}s (target: <30s)"
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
 fi
 
 # === INVARIANT #11: Full Accessibility Audit ===
@@ -355,7 +406,7 @@ if command -v axe &> /dev/null; then
         echo "  [PASS] Accessibility: No critical violations"
     else
         echo "  [FAIL] Accessibility: Violations found"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 else
     echo "  [SKIP] axe-cli not installed - manual audit required"
@@ -474,6 +525,34 @@ exit 0
 | Error Messages | Appendix F | step-07.sh L:67-72 | Pending |
 | UI Wireframes | Appendix E | step-08.sh L:34-56 | Pending |
 ```
+
+## DATABASE MIGRATION GUIDANCE
+
+### Supabase TypeScript Types
+When a step creates new database tables, the Supabase TypeScript types won't include them until regenerated.
+
+**Workarounds for typed client:**
+1. **Use REST API directly** for new tables (fetch with proper headers)
+2. **Use type assertions** (`supabase.from('new_table' as any)`) - not recommended
+3. **Regenerate types** after migration (preferred when possible)
+
+**Add to step instructions if creating tables:**
+```
+# After migration is applied, regenerate Supabase types:
+# npx supabase gen types typescript --project-id {project_id} > src/lib/supabase/database.types.ts
+#
+# Until types are regenerated, use REST API pattern:
+# const response = await fetch(`${supabaseUrl}/rest/v1/new_table`, {
+#   headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` }
+# })
+```
+
+### Migration Application Methods
+1. **Supabase CLI:** `supabase db push` (requires CLI auth)
+2. **Dashboard SQL Editor:** Copy/paste migration SQL
+3. **Direct psql:** Using DATABASE_URL connection string
+
+Document the chosen method in RALPH-GENERATION-LOG.md.
 
 ## QUALITY CHECK (run before outputting)
 
