@@ -675,11 +675,39 @@ Here's what each file includes...
 #!/bin/bash
 ...actual content...
 === END FILE ===
+
+=== FILE: test-01.sh ===
+#!/bin/bash
+...actual content...
+=== END FILE ===
+
+... (all steps and tests) ...
+
+=== FILE: gate-1.sh ===
+#!/bin/bash
+...actual content...
+=== END FILE ===
 ```
+
+## MANDATORY OUTPUT ORDER (CRITICAL)
+
+You MUST generate files in this EXACT order:
+1. **PRP-COVERAGE.md** (first)
+2. **ALL step-NN.sh files** (step-01, step-02, step-03, etc.)
+3. **ALL test-NN.sh files** (test-01, test-02, test-03, etc.)
+4. **ALL gate-N.sh files** (gate-1, gate-2, etc.) - GATES COME LAST
+5. **ralph.sh** (runner)
+6. **RALPH-GENERATION-LOG.md** (last)
+
+**DO NOT generate gates before steps. Gates reference steps, so steps MUST exist first.**
+
+If your output contains `gate-1.sh` but no `step-01.sh`, you have FAILED. Start over.
 
 **Begin your response with:**
 ```
 === FILE: PRP-COVERAGE.md ===
 ```
+
+Then IMMEDIATELY output step-01.sh, step-02.sh, etc.
 
 Do not include ANY preamble, explanation, or summary. Start directly with the first file.
