@@ -69,9 +69,9 @@ Include detected patterns in RALPH-GENERATION-LOG.md:
 
 **CRITICAL: Detect the PRP structure FIRST before generating.**
 
-PRPs can have two structures - you MUST generate steps for BOTH:
+PRPs can have multiple structures - you MUST generate steps for ALL formats:
 
-### Structure A: Explicit Steps (preferred)
+### Structure A: Explicit Steps
 ```
 ## Implementation Steps
 ### Step 1: Create State Module
@@ -79,30 +79,74 @@ PRPs can have two structures - you MUST generate steps for BOTH:
 ```
 → One step-NN.sh per `### Step N:`
 
-### Structure B: Phase-Based (common)
+### Structure B: Deliverables Block (common)
 ```
-## Timeline with Validation Gates
-### Phase 1: Intent Classification (FR-NLP01)
-  - [ ] Create classifier module
-  - [ ] Add intent detection
-### Phase 2: Corpus Routing (FR-NLP02)
-  - [ ] Implement routing logic
-```
-→ **CONVERT phases to steps**: Each checkbox item OR each phase becomes a step-NN.sh
-→ Example: Phase 1 with 2 tasks + Phase 2 with 1 task = step-01.sh, step-02.sh, step-03.sh
+### Phase 1: Configuration Management (FR-F01)
+**Deliverables:**
+- Multi-corpus configuration system
+- Configuration validation at startup
+- Default value handling
 
-### Structure C: Sub-PRPs
+**Validation Gate:**
+```bash
+pytest tests/unit/test_config.py -v
+```
+→ Each bullet under `**Deliverables:**` = one step-NN.sh
+→ Example: 4 bullets = step-01.sh, step-02.sh, step-03.sh, step-04.sh
+→ The `**Validation Gate:**` block = gate-1.sh criteria
+
+### Structure C: Checkbox Format (common)
+```
+### Phase 1: Intent Classification (FR-NLP01)
+- [ ] Implement LLM intent classification with 2s timeout
+- [ ] Handle educational/case_lookup/ambiguous intents
+- [ ] Return structured JSON with confidence
+- **Gate**: Classification returns valid JSON
+```
+→ **EACH `- [ ]` line = one step-NN.sh** (NOT just the phase!)
+→ Example: 3 checkboxes = step-01.sh, step-02.sh, step-03.sh
+→ The `- **Gate**:` line = gate-1.sh criteria (NOT a step!)
+→ **WARNING**: Do NOT confuse inline `**Gate**:` with a step. It defines gate criteria only.
+
+### Structure D: Sub-PRPs
 ```
 ## Sub-PRPs (Implementation Split)
 | Sub-PRP | Scope |
 ```
 → Treat each sub-PRP as a phase, generate steps for the CURRENT PRP's scope
 
-**IF NO EXPLICIT STEPS FOUND:**
-1. Look for `### Phase N:` sections
-2. Extract tasks from checkboxes `- [ ]` or numbered lists
-3. Create one step per task
-4. Create one gate per phase
+## STEP EXTRACTION ALGORITHM
+
+Follow this EXACT algorithm to extract steps:
+
+```
+step_count = 0
+for each Phase section in PRP:
+    # Method 1: Look for **Deliverables:** block
+    if Phase contains "**Deliverables:**":
+        for each bullet after **Deliverables:**:
+            step_count += 1
+            create step-{step_count:02d}.sh from bullet content
+            create test-{step_count:02d}.sh for that step
+
+    # Method 2: Look for checkbox items
+    else if Phase contains "- [ ]" items:
+        for each "- [ ]" line (EXCLUDING lines with **Gate**):
+            step_count += 1
+            create step-{step_count:02d}.sh from checkbox content
+            create test-{step_count:02d}.sh for that step
+
+    # Method 3: Treat phase itself as one step
+    else:
+        step_count += 1
+        create step-{step_count:02d}.sh for entire phase
+        create test-{step_count:02d}.sh for that step
+
+    # Always create gate for the phase
+    create gate-{phase_number}.sh with phase validation criteria
+
+# VERIFY: step_count must be > 0. If 0, you missed something. Re-scan the PRP.
+```
 
 **NEVER generate only gates without steps. ALWAYS generate step-NN.sh + test-NN.sh files.**
 
@@ -603,16 +647,23 @@ Before generating output, verify ALL of these:
 
 ### MINIMUM FILE REQUIREMENTS (CRITICAL)
 **You MUST generate AT LEAST:**
-- 1+ step-NN.sh files (one per task/deliverable)
+- 1+ step-NN.sh files (one per task/deliverable/checkbox)
 - 1+ test-NN.sh files (one per step)
 - 1+ gate-N.sh files (one per phase)
 - PRP-COVERAGE.md
 - RALPH-GENERATION-LOG.md
 
-**If you only have gates without steps, you FAILED. Go back and extract steps from:**
-- `### Phase N:` section checkboxes/tasks
-- Timeline deliverables
-- Success criteria requirements
+**FILE COUNT VERIFICATION:**
+- Count all `- [ ]` checkboxes in the PRP (excluding `**Gate**:` lines) = X
+- Count all bullets under `**Deliverables:**` sections = Y
+- **Minimum step files required = max(X, Y, number_of_phases)**
+
+**If you only have gates without steps, you FAILED. Re-scan the PRP for:**
+1. `- [ ]` checkbox items → each one is a step
+2. Bullets under `**Deliverables:**` → each one is a step
+3. `### Phase N:` without checkboxes → treat phase as one step
+
+**Example: NLP PRP with 4 phases, 4 checkboxes each = 16 step-NN.sh files**
 
 ### Content Checks
 1. **Count match:** PRP has N deliverables/tasks → exactly N step files
