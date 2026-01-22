@@ -2444,8 +2444,12 @@ Skip other phases."
            [[ "$first_200" =~ "here's what each file" ]] || \
            [[ "$first_200" =~ "this implementation" ]] || \
            [[ "$first_200" =~ "let me generate" ]] || \
-           [[ "$first_200" =~ "i'll create" ]]; then
-            return 0  # Is summary
+           [[ "$first_200" =~ "i'll create" ]] || \
+           [[ "$first_200" =~ "continue from" ]] || \
+           [[ "$first_200" =~ "left off" ]] || \
+           [[ "$first_200" =~ "picking up where" ]] || \
+           [[ "$first_200" =~ "continuing with step" ]]; then
+            return 0  # Is summary or continuation (invalid)
         fi
 
         # Check if first non-empty line starts with file delimiter
