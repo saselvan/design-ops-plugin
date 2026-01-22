@@ -2430,6 +2430,70 @@ Skip other phases."
 
     track_cost "$prompt" "$result"
 
+    # === DESCRIBE VS DO DETECTION ===
+    # Detect if LLM summarized instead of outputting files
+    is_summary_output() {
+        local response="$1"
+        local first_200
+        first_200=$(echo "$response" | head -c 200 | tr '[:upper:]' '[:lower:]')
+
+        # Summary signals - LLM described instead of did
+        if [[ "$first_200" =~ "i have successfully generated" ]] || \
+           [[ "$first_200" =~ "i would create" ]] || \
+           [[ "$first_200" =~ "the files would contain" ]] || \
+           [[ "$first_200" =~ "here's what each file" ]] || \
+           [[ "$first_200" =~ "this implementation" ]] || \
+           [[ "$first_200" =~ "let me generate" ]] || \
+           [[ "$first_200" =~ "i'll create" ]]; then
+            return 0  # Is summary
+        fi
+
+        # Check if first non-empty line starts with file delimiter
+        local first_content_line
+        first_content_line=$(echo "$response" | grep -v '^$' | head -1)
+        if [[ ! "$first_content_line" =~ ^===\ FILE: ]]; then
+            # Might be summary - check if ANY file delimiters exist
+            if ! echo "$response" | grep -q "^=== FILE:"; then
+                return 0  # No file delimiters at all = summary
+            fi
+        fi
+
+        return 1  # Not summary
+    }
+
+    # Retry with stronger prompt if summary detected
+    local retry_count=0
+    local max_retries=2
+
+    while is_summary_output "$result" && [[ $retry_count -lt $max_retries ]]; do
+        ((retry_count++))
+        echo -e "${YELLOW}⚠ Detected 'describe' output instead of 'do' output. Retrying ($retry_count/$max_retries)...${NC}"
+
+        # Stronger prompt for retry
+        local retry_prompt="$prompt
+
+---
+CRITICAL: Your previous response DESCRIBED the files instead of OUTPUTTING them.
+
+THIS IS WRONG. You must OUTPUT THE ACTUAL FILE CONTENTS.
+
+START YOUR RESPONSE WITH EXACTLY:
+=== FILE: PRP-COVERAGE.md ===
+
+NO preamble. NO explanation. NO summary. JUST THE FILES.
+
+BEGIN NOW:"
+
+        result=$(claude --model "$CLAUDE_MODEL" -p "$retry_prompt" 2>/dev/null)
+        track_cost "$retry_prompt" "$result"
+    done
+
+    if is_summary_output "$result"; then
+        echo -e "${RED}✗ LLM produced summary output after $max_retries retries${NC}"
+        echo -e "${YELLOW}  Raw output saved for manual review${NC}"
+    fi
+    # === END DESCRIBE VS DO DETECTION ===
+
     # Create output directory
     mkdir -p "$output_dir"
 

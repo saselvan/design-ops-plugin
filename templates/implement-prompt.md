@@ -591,3 +591,38 @@ Use the file delimiter format:
 [contents]
 === END FILE ===
 ```
+
+---
+
+## CRITICAL OUTPUT INSTRUCTION
+
+**STOP. DO NOT SUMMARIZE. OUTPUT THE FILES NOW.**
+
+You must output ACTUAL FILE CONTENTS with the `=== FILE: ===` delimiters.
+
+❌ WRONG (describe mode - will be rejected):
+```
+I have successfully generated the following files...
+The step-01.sh file contains...
+Here's what each file includes...
+```
+
+✅ CORRECT (do mode - required):
+```
+=== FILE: PRP-COVERAGE.md ===
+# PRP Coverage Matrix
+...actual content...
+=== END FILE ===
+
+=== FILE: step-01.sh ===
+#!/bin/bash
+...actual content...
+=== END FILE ===
+```
+
+**Begin your response with:**
+```
+=== FILE: PRP-COVERAGE.md ===
+```
+
+Do not include ANY preamble, explanation, or summary. Start directly with the first file.
