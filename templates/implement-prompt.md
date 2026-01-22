@@ -65,6 +65,47 @@ Include detected patterns in RALPH-GENERATION-LOG.md:
 - UI library: shadcn/ui components from @/components/ui
 ```
 
+## PRP STRUCTURE DETECTION
+
+**CRITICAL: Detect the PRP structure FIRST before generating.**
+
+PRPs can have two structures - you MUST generate steps for BOTH:
+
+### Structure A: Explicit Steps (preferred)
+```
+## Implementation Steps
+### Step 1: Create State Module
+### Step 2: Create Grader Node
+```
+→ One step-NN.sh per `### Step N:`
+
+### Structure B: Phase-Based (common)
+```
+## Timeline with Validation Gates
+### Phase 1: Intent Classification (FR-NLP01)
+  - [ ] Create classifier module
+  - [ ] Add intent detection
+### Phase 2: Corpus Routing (FR-NLP02)
+  - [ ] Implement routing logic
+```
+→ **CONVERT phases to steps**: Each checkbox item OR each phase becomes a step-NN.sh
+→ Example: Phase 1 with 2 tasks + Phase 2 with 1 task = step-01.sh, step-02.sh, step-03.sh
+
+### Structure C: Sub-PRPs
+```
+## Sub-PRPs (Implementation Split)
+| Sub-PRP | Scope |
+```
+→ Treat each sub-PRP as a phase, generate steps for the CURRENT PRP's scope
+
+**IF NO EXPLICIT STEPS FOUND:**
+1. Look for `### Phase N:` sections
+2. Extract tasks from checkboxes `- [ ]` or numbered lists
+3. Create one step per task
+4. Create one gate per phase
+
+**NEVER generate only gates without steps. ALWAYS generate step-NN.sh + test-NN.sh files.**
+
 ## EXTRACTION MAP
 
 | PRP Section | → | Ralph Output | Extraction Rule |
@@ -74,6 +115,8 @@ Include detected patterns in RALPH-GENERATION-LOG.md:
 | `thinking_level` | → | Step headers line 13 | Include level + focus areas |
 | `domains` + invariant files | → | Step headers lines 8-11 | List applicable invariants with specific application |
 | Phase N title | → | gate-N.sh header | Copy exactly |
+| **`### Step N:` sections** | → | step-NN.sh | One step per explicit step |
+| **`### Phase N:` + checkboxes** | → | step-NN.sh | One step per checkbox/task item |
 | Phase N deliverables (F0.1, F1.2...) | → | step-NN.sh | One step per deliverable |
 | Deliverable title | → | Step header line 4 | **VERBATIM** - copy exact title |
 | Deliverable description | → | Step `=== OBJECTIVE ===` section | **VERBATIM** |
@@ -558,7 +601,21 @@ Document the chosen method in RALPH-GENERATION-LOG.md.
 
 Before generating output, verify ALL of these:
 
-1. **Count match:** PRP has N deliverables → exactly N step files
+### MINIMUM FILE REQUIREMENTS (CRITICAL)
+**You MUST generate AT LEAST:**
+- 1+ step-NN.sh files (one per task/deliverable)
+- 1+ test-NN.sh files (one per step)
+- 1+ gate-N.sh files (one per phase)
+- PRP-COVERAGE.md
+- RALPH-GENERATION-LOG.md
+
+**If you only have gates without steps, you FAILED. Go back and extract steps from:**
+- `### Phase N:` section checkboxes/tasks
+- Timeline deliverables
+- Success criteria requirements
+
+### Content Checks
+1. **Count match:** PRP has N deliverables/tasks → exactly N step files
 2. **SC coverage:** Every SC-N.N appears in a test file with `prp_ref`
 3. **Verbatim sections:** Every test has `=== PRP SUCCESS CRITERIA (VERBATIM) ===`
 4. **Verbatim commands:** Every test has `=== PRP VALIDATION COMMANDS (VERBATIM) ===`
