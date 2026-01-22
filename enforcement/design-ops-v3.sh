@@ -432,7 +432,8 @@ $prompt"
     fi
 
     # Pass prompt as argument (piping hangs in some environments)
-    result=$(claude --model "$CLAUDE_MODEL" -p "$prompt" 2>/dev/null)
+    # CRITICAL: --no-session-persistence prevents context leaking from previous sessions
+    result=$(claude --model "$CLAUDE_MODEL" --no-session-persistence -p "$prompt" 2>/dev/null)
 
     track_cost "$prompt" "$result"
     echo "$result"
@@ -2426,7 +2427,8 @@ Skip other phases."
     # Call Claude
     local result
     # Pass prompt as argument (piping hangs in some environments)
-    result=$(claude --model "$CLAUDE_MODEL" -p "$prompt" 2>/dev/null)
+    # CRITICAL: --no-session-persistence prevents context leaking from previous sessions
+    result=$(claude --model "$CLAUDE_MODEL" --no-session-persistence -p "$prompt" 2>/dev/null)
 
     track_cost "$prompt" "$result"
 
@@ -2488,7 +2490,7 @@ NO preamble. NO explanation. NO summary. JUST THE FILES.
 
 BEGIN NOW:"
 
-        result=$(claude --model "$CLAUDE_MODEL" -p "$retry_prompt" 2>/dev/null)
+        result=$(claude --model "$CLAUDE_MODEL" --no-session-persistence -p "$retry_prompt" 2>/dev/null)
         track_cost "$retry_prompt" "$result"
     done
 
