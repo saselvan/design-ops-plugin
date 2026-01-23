@@ -1,7 +1,7 @@
 ---
 name: Design
 description: Enhanced Design Ops workflow with invariant enforcement, multi-agent orchestration, and continuous validation. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation, watch mode.
-version: "2.0"
+version: "2.2"
 ---
 
 # Design Ops Skill
@@ -1430,426 +1430,382 @@ The schema mismatches we experienced (fabric_id vs aims_code) happened because R
 
 ---
 
-### /design run [step-number]
+### /design run [--dangerous] [--max-regen N]
 
-Run Ralph steps with **incremental Playwright verification**. Each UI step is verified before proceeding to the next.
-
-**Usage:**
-```
-/design run           # Run all remaining steps with verification
-/design run 5         # Run step 5 only
-/design run --from 3  # Run from step 3 onwards
-/design run --no-verify  # Skip Playwright (file checks only)
-```
-
-**The Ralph Loop (CRITICAL):**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  FOR EACH STEP:                                             │
-│                                                             │
-│  1. Execute step-N.sh (create/modify code)                  │
-│  2. Run test-N.sh (file existence, TypeScript, build)       │
-│  3. IF step has PLAYWRIGHT_VERIFY section:                  │
-│     → Start dev server if needed                            │
-│     → Navigate to route                                     │
-│     → Snapshot and verify elements                          │
-│     → ALL checks must pass                                  │
-│  4. PASS → Proceed to step N+1                              │
-│     FAIL → Retry up to 3x, then STOP                        │
-│                                                             │
-│  This ensures each feature works BEFORE building on top.    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Execution Flow:**
-
-```
-Step 5: Database schema     → test-5.sh (no UI)      → PASS → Step 6
-Step 15: Style list         → test-15.sh + Playwright /styles → PASS → Step 16
-Step 16: Style import page  → test-16.sh + Playwright /styles/import → PASS → Step 17
-Step 25: Fabrics list       → test-25.sh + Playwright /fabrics → PASS → Step 26
-```
-
-**Step-by-Step Execution:**
-
-1. **Init check:**
-   ```bash
-   npm run build || exit 1
-   ```
-
-2. **Run step:**
-   ```bash
-   ./ralph-steps/step-N.sh
-   ```
-
-3. **Run test (file checks):**
-   ```bash
-   ./ralph-steps/test-N.sh
-   ```
-
-4. **Playwright Verification (if PLAYWRIGHT_VERIFY exists):**
-
-   a. **Parse verification spec from test script:**
-      ```bash
-      # Extract JSON between PLAYWRIGHT_VERIFY markers
-      spec=$(sed -n '/PLAYWRIGHT_VERIFY/,/PLAYWRIGHT_VERIFY/p' test-N.sh)
-      ```
-
-   b. **Ensure dev server running:**
-      ```bash
-      curl -s http://localhost:3000 > /dev/null || npm run dev &
-      ```
-
-   c. **Execute MCP tools:**
-      ```javascript
-      // Navigate
-      mcp__playwright__browser_navigate({ url: "http://localhost:3000{route}" })
-
-      // Snapshot
-      mcp__playwright__browser_snapshot({})
-
-      // Parse snapshot YAML for each check
-      // Verify: headings, buttons, text, links, a11y landmarks
-      ```
-
-   d. **Report results:**
-      ```
-      ═══════════════════════════════════════════════════════
-        STEP 15: Playwright Verification
-      ═══════════════════════════════════════════════════════
-      Route: /styles
-
-      Checks:
-        ✓ heading[1]: "Style Library"
-        ✓ heading[3]: "No styles yet" (empty state)
-        ✓ navigation: "Main navigation"
-        ✓ landmarks: banner, main, navigation
-
-      Result: 4/4 PASSED → Proceeding to step 16
-      ═══════════════════════════════════════════════════════
-      ```
-
-5. **On Playwright failure:**
-   - Show which checks failed
-   - Show actual snapshot content
-   - Retry step (code may need adjustment)
-   - Max 3 attempts before stopping
-
-6. **After 3 failures:**
-   - STOP execution
-   - Show failure context
-   - Wait for human intervention
-
-**Test Script Format:**
-
-```bash
-#!/bin/bash
-# test-N.sh
-
-# ... file checks ...
-
-# Playwright verification spec (parsed by agent)
-cat << 'PLAYWRIGHT_VERIFY'
-{
-  "route": "/styles",
-  "checks": [
-    { "type": "heading", "level": 1, "text": "Style Library" },
-    { "type": "heading", "level": 3, "text": "No styles yet" },
-    { "type": "navigation", "label": "Main navigation" },
-    { "type": "button", "text": "Sign out" },
-    { "type": "a11y", "landmarks": ["banner", "main", "navigation"] }
-  ]
-}
-PLAYWRIGHT_VERIFY
-```
-
-**Why Incremental Verification Matters:**
-
-Without it:
-```
-Step 15 → Step 16 → Step 17 → ... → Step 24 → Gate 3 → FAIL
-(Where did it break? Have to debug 10 steps)
-```
-
-With it:
-```
-Step 15 → Playwright ✓ → Step 16 → Playwright ✗ STOP
-(Immediately know Step 16 broke something)
-```
+**EXECUTABLE PROCEDURE - FOLLOW THESE STEPS EXACTLY**
 
 ---
 
-### Execution Logging (PRP Lineage & Learnings)
+## STEP 1: LOCATE AND LOAD STATE
 
-Every step execution is logged with full traceability back to the PRP:
+```
+ACTION: Find ralph-steps directory and load state
+```
 
-**Initialize logging:**
+1.1. Look for `ralph-steps/` in current directory
+1.2. Read `ralph-steps/ralph-state.json`
+1.3. If not found: ERROR "No ralph-state.json. Run /design implement first."
+1.4. Extract: `current_step`, `total_steps`, `mode`, `dev_server.port`, `dev_server.command`
+1.5. Parse arguments:
+    - `--dangerous` → set mode to "dangerous"
+    - `--max-regen N` → set max_regenerations (default 3)
+
+---
+
+## STEP 2: EXECUTE THE LOOP
+
+```
+FOR step_num FROM current_step TO total_steps:
+```
+
+### 2.1 RUN STEP SCRIPT
+
 ```bash
-./tools/ralph-logger.sh init <prp-file> <steps-dir>
+Bash: ./ralph-steps/step-{step_num:02d}.sh
 ```
 
-**Automatic logging during /design run:**
+- If exit code != 0: Go to **STEP 3: HANDLE FAILURE**
+- If exit code == 0: Continue to 2.2
 
-```
-═══════════════════════════════════════════════════════
-  STEP 15: Create style library list view
-  PRP: Phase 1.3 - Style Management
-═══════════════════════════════════════════════════════
+### 2.2 RUN TEST SCRIPT
 
-Executing step-15.sh...
-✓ Step executed
-
-Running test-15.sh...
-✓ File checks passed
-
-Playwright verification /styles...
-  ✓ heading[1]: "Style Library"
-  ✓ heading[3]: "No styles yet"
-  ✓ navigation: "Main navigation"
-  ✓ landmarks: banner, main, navigation
-✓ Playwright: 4/4 checks passed
-
-Files changed:
-  + src/components/styles/style-list.tsx
-  + src/components/styles/style-table.tsx
-  ~ src/components/styles/index.ts
-
-Learning captured: "Empty state needs aria-live for screen readers"
-
-✓ Step 15 PASSED → Proceeding to Step 16
+```bash
+Bash: ./ralph-steps/test-{step_num:02d}.sh
 ```
 
-**Log structure (`ralph-execution.json`):**
+- Capture FULL OUTPUT (stdout + stderr)
+- If exit code != 0: Go to **STEP 3: HANDLE FAILURE**
+- If exit code == 0: Continue to 2.3
+
+### 2.3 PARSE PLAYWRIGHT_VERIFY
+
+Search test output for JSON between `PLAYWRIGHT_VERIFY` markers:
+
+```
+Extract: route, checks[]
+```
+
+- If no PLAYWRIGHT_VERIFY found: Skip to 2.5
+- If found: Continue to 2.4
+
+### 2.4 PLAYWRIGHT MCP VERIFICATION
+
+**2.4.1 Ensure dev server running:**
+
+```bash
+Bash: curl -s http://localhost:{port} --max-time 2
+```
+
+If fails:
+```bash
+Bash: lsof -ti:{port} | xargs kill -9 2>/dev/null; {dev_command} &
+     (run_in_background=true)
+```
+Wait 5 seconds, retry health check.
+
+**2.4.2 Navigate:**
+
+```
+mcp__playwright__browser_navigate({ url: "http://localhost:{port}{route}" })
+```
+
+**2.4.3 Snapshot:**
+
+```
+mcp__playwright__browser_snapshot({})
+```
+
+**2.4.4 Verify each check:**
+
+| Check Type | How to Verify |
+|------------|---------------|
+| `heading` | Find `heading` with matching `level` containing `text` |
+| `button` | Find `button` containing `text` |
+| `text` | Find `text` anywhere in snapshot |
+| `link` | Find `link` containing `text` |
+| `section` | Find section/region with `label` |
+| `navigation` | Find `navigation` landmark |
+
+**2.4.5 If ANY check fails:**
+
+Record failure:
+```json
+{
+  "step": {step_num},
+  "check_type": "{type}",
+  "expected": "{expected_text}",
+  "actual": "Not found in snapshot",
+  "snapshot_excerpt": "{relevant_part_of_snapshot}"
+}
+```
+
+Go to **STEP 3: HANDLE FAILURE**
+
+### 2.5 UPDATE STATE (SUCCESS)
+
+Update `ralph-state.json`:
+```json
+{
+  "steps": {
+    "{step_num}": { "status": "passed", "attempts": {attempts} }
+  },
+  "current_step": {step_num + 1}
+}
+```
+
+### 2.6 CHECK FOR GATE
+
+If `ralph-steps/gate-{N}.sh` exists for completed phase:
+
+```bash
+Bash: ./ralph-steps/gate-{N}.sh
+```
+
+- **Default mode**: Ask user "Gate {N} passed. Continue? [Y/n]"
+- **Dangerous mode**: Auto-continue
+
+### 2.7 CONTINUE LOOP
+
+Go to next step_num
+
+---
+
+## STEP 3: HANDLE FAILURE
+
+**3.0 Determine failure type:**
+
+| Failed Script | Failure Type | Retry Strategy |
+|---------------|--------------|----------------|
+| `step-N.sh` | Environment/setup | Often NOT fixable by code edit. Check: missing dependency? permission? If syntax error in step script itself, fix it. Otherwise STOP. |
+| `test-N.sh` | Code verification | FIXABLE. The source code that step created is wrong. Fix with Edit/Write. |
+| Playwright check | UI rendering | FIXABLE. The component isn't rendering correctly. Fix the source code. |
+
+**3.1 Record attempt:**
 
 ```json
 {
-  "prp": {
-    "id": "FASHION-MVP-001",
-    "name": "Foundation Data & Authentication MVP"
-  },
   "steps": {
-    "15": {
-      "description": "Create style library list view",
-      "prp_lineage": "Phase 1.3 - Style Management",
-      "status": "pass",
-      "attempts": 1,
-      "file_changes": [
-        { "action": "created", "file": "src/components/styles/style-list.tsx" },
-        { "action": "created", "file": "src/components/styles/style-table.tsx" }
-      ],
-      "playwright": {
-        "route": "/styles",
-        "checks_passed": 4,
-        "checks_total": 4
-      },
-      "learnings": ["Empty state needs aria-live for screen readers"]
+    "{step_num}": {
+      "status": "failed",
+      "attempts": {attempts},
+      "error": "{error_message}",
+      "failure_type": "step|test|playwright"
     }
-  },
-  "summary": {
-    "total_steps": 33,
-    "passed": 15,
-    "failed": 0,
-    "retries": 2,
-    "learnings_count": 8
   }
 }
 ```
 
-**Learnings file (`ralph-learnings.md`):**
+**3.2 If STEP script failed:**
 
-Accumulated insights captured during execution:
+1. Read error message
+2. If dependency/permission issue: STOP, output "Environment issue: {error}. Fix manually."
+3. If syntax error in step script itself: Fix with Edit, retry
+4. If unclear: STOP, wait for human
 
-```markdown
-# Ralph Execution Learnings
+**3.3 If TEST script failed (attempts < 3):**
 
-**PRP:** Foundation Data & Authentication MVP
-**Started:** 2026-01-20 21:53
+1. Read the step script header to understand INTENT
+2. Read the error message from test output
+3. Identify what source code needs fixing (not the test - test is the contract)
+4. Use **Edit** or **Write** to fix the SOURCE CODE that step created
+5. Increment attempts
+6. Go back to 2.2 (re-run test, not step)
 
-## Learnings by Step
+**3.4 If PLAYWRIGHT check failed (attempts < 3):**
 
-### Step 15
-- Empty state needs aria-live for screen readers
+1. Read the snapshot to see what's actually rendered
+2. Compare to expected check
+3. Fix the SOURCE CODE (component/page) to render correctly
+4. Increment attempts
+5. Go back to 2.4 (re-run playwright verification)
 
-### Step 17
-- Excel parsing with xlsx library requires explicit column mapping
+**3.5 If attempts >= 3:**
 
-### Step 25
-- AIMS code validation should happen client-side before submit
+- **Default mode**:
+  - STOP execution
+  - Output: "Step {step_num} failed 3 times. Fix manually and run `/design run {step_num}`"
+
+- **Dangerous mode**:
+  - If regenerations < max_regenerations:
+    - Record learning: what failed, why, what was tried
+    - Read PRP file for the deliverable this step implements
+    - Regenerate `step-N.sh` with context: "Previous attempts failed because {errors}. Generate differently."
+    - NOTE: Do NOT regenerate `test-N.sh` - it's the PRP contract
+    - Increment regenerations
+    - Reset attempts to 0
+    - Go back to 2.1
+  - Else:
+    - STOP: "Max regenerations ({max_regenerations}) reached"
+
+---
+
+## STEP 4: COMPLETION
+
+When all steps pass:
+
+1. Output summary:
+```
+═══════════════════════════════════════════════════════════
+  RALPH EXECUTION COMPLETE
+═══════════════════════════════════════════════════════════
+Steps: {total_steps}/{total_steps} passed
+Gates: {gates_passed}/{total_gates} passed
+Learnings: {learnings_count} captured
+
+Dev server running at http://localhost:{port}
 ```
 
-**View execution report:**
+2. Update state: `"status": "complete"`
+
+---
+
+## QUICK REFERENCE
+
+| Situation | Action |
+|-----------|--------|
+| Step script fails | Read error, fix with Edit, retry |
+| Test script fails | Read error, fix source code, retry |
+| Playwright check fails | Read snapshot, fix UI code, retry |
+| 3 failures (default) | Stop, wait for human |
+| 3 failures (dangerous) | Regenerate from PRP |
+| Gate reached (default) | Ask approval |
+| Gate reached (dangerous) | Auto-continue |
+
+---
+
+### Devcontainer Integration
+
+**Setup (one-time, human):**
 ```bash
-./tools/ralph-logger.sh report
+# Enter devcontainer
+devcontainer exec --workspace-folder . bash
+
+# Login to Claude
+claude login
 ```
 
-**Phase summary:**
+**Runner script (`ralph-runner.sh`):**
 ```bash
-./tools/ralph-logger.sh phase-summary 3
-```
+#!/bin/bash
+# Ralph runner for devcontainers - executes in dangerous mode
 
-Output:
-```
-═══════════════════════════════════════════════════════
-  PHASE 3 SUMMARY
-═══════════════════════════════════════════════════════
+PRP_PATH="${1:-./docs/plans/*.prp.md}"
+MAX_REGEN="${2:-3}"
 
-Steps: 15-24 (10 total)
-Status: 9 passed, 0 failed, 1 retry
-Files: 18 created, 4 modified
-
-Learnings (3):
-  1. Empty state needs aria-live for screen readers
-  2. Excel parsing requires explicit column mapping
-  3. Search debounce should be 300ms for good UX
-═══════════════════════════════════════════════════════
+echo "Starting Ralph v2 in dangerous mode..."
+claude --dangerously-skip-permissions \
+  -p "/design run --dangerous --max-regen $MAX_REGEN"
 ```
 
 ---
 
-### Learning Review & Promotion (Human Gate)
+### Two-Tier Learning System
 
-Learnings captured during execution flow through a human review gate:
+| Level | Scope | Storage | Example |
+|-------|-------|---------|---------|
+| **Local** | This project | `ralph-state.json`, `LEARNINGS.md` | "Providence has non-standard YAML" |
+| **Invariant** | All future PRPs | `learned-invariants.md` | "Always use python3 not python" |
 
+**Promotion flow:**
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  LEARNING FLOW                                                  │
-│                                                                 │
-│  1. Capture: Learning logged during step execution              │
-│                     ↓                                           │
-│  2. Review:  Human reviews with `review-learnings`              │
-│                     ↓                                           │
-│              ┌──────┴──────┐                                    │
-│              ↓             ↓                                    │
-│           Accept        Reject                                  │
-│              ↓                                                  │
-│  3. Evaluate: Is this valuable for future projects?             │
-│              ↓                                                  │
-│       ┌──────┴──────┐                                           │
-│       ↓             ↓                                           │
-│   Project-      Promote to                                      │
-│   specific      INVARIANT                                       │
-│       ↓             ↓                                           │
-│   learnings.md  learned-invariants.md                           │
-│                     ↓                                           │
-│              Future PRPs reference:                             │
-│              "Must satisfy INV-001"                             │
-└─────────────────────────────────────────────────────────────────┘
+Local learning captured
+       │
+       ▼
+Human reviews (default) / auto-flag (dangerous)
+       │
+       ▼
+If systemic → promote to invariant
+       │
+       ▼
+Future /design implement references invariant
 ```
 
-**Review learnings:**
-```bash
-./tools/ralph-logger.sh review-learnings
+---
+
+### Learning Review & Promotion
+
+**Default mode:** Human reviews learnings after execution:
+
+```
+/design learnings review
 ```
 
 Output:
 ```
 ╔═══════════════════════════════════════════════════════════════╗
-║  LEARNING REVIEW (Human Gate)                                 ║
+║  LEARNING REVIEW                                              ║
 ╚═══════════════════════════════════════════════════════════════╝
 
 Found 3 learning(s) to review:
 
-[L15-1] Step 15 (Phase 1.3 - Style Management)
-    Auth required - /styles shows sidebar but main content needs login session
+[L4-1] Step 4 (Phase 1 - Data Loaders)
+    python: command not found - use python3 in bash scripts
 
-[L16-1] Step 16 (Phase 1.3 - Style Management)
-    Login page verified: email/password fields, sign in button, signup link
+[L7-1] Step 7 (Phase 3 - Meeting Prep)
+    grep interprets --pattern as flag - use grep -- "$pattern"
 
-[L25-1] Step 25 (Phase 1.4 - Fabric Management)
-    AIMS code validation should happen client-side before submit
+[L9-1] Step 9 (Phase 4 - Integration)
+    YAML parse errors in Obsidian files - need defensive parsing
 
-───────────────────────────────────────────────────────────────
-REVIEW OPTIONS
-───────────────────────────────────────────────────────────────
-For each learning, decide:
-
-  [A] Accept    - Keep as project learning
-  [E] Edit      - Modify before accepting
-  [R] Reject    - Not valuable, discard
-  [P] Promote   - Elevate to invariant (guides future projects)
+Options: [A]ccept  [R]eject  [P]romote to invariant
 ```
+
+**Dangerous mode:** Auto-accepts local learnings, flags potential invariants for later review.
 
 **Promote to invariant:**
-```bash
-./tools/ralph-logger.sh promote-learning L25-1
+```
+/design learnings promote L4-1
 ```
 
-Output:
-```
-╔═══════════════════════════════════════════════════════════════╗
-║  PROMOTE LEARNING TO INVARIANT                                ║
-╚═══════════════════════════════════════════════════════════════╝
-
-Learning: AIMS code validation should happen client-side before submit
-Source: Step 25 - Phase 1.4 - Fabric Management
-Project: Foundation Data & Authentication MVP
-
-Converting to invariant format...
-
-✓ Created invariant INV-001
-  File: ~/.claude/plugins/design-ops/invariants/learned-invariants.md
-
-Next steps:
-  1. Edit the invariant to add Context, Example, Validation
-  2. Reference in future PRPs: 'Must satisfy INV-001'
-```
-
-**Invariant format (`learned-invariants.md`):**
-
+Creates entry in `learned-invariants.md`:
 ```markdown
 ### INV-001
 
-**Source:** Foundation Data & Authentication MVP / Step 25 (Phase 1.4)
-**Date:** 2026-01-20
+**Source:** SA Assistant / Step 4 (Phase 1)
+**Date:** 2026-01-23
 
-**Rule:** AIMS code validation should happen client-side before submit
+**Rule:** Always use python3 not python in shell scripts
 
-**Context:** When building import wizards or forms that accept business identifiers
+**Context:** macOS bash doesn't have python in PATH by default
 
-**Example:** AIMS codes are 5-character uppercase. Validate format on blur, not just on submit.
-
-**Validation:** Check that form shows inline error before submit button is enabled.
-
----
+**Prevention:** In test-utils.sh and gate scripts, use python3 -c not python -c
 ```
-
-**Why this matters:**
-
-- Learnings don't get lost between sessions
-- Human decides what's worth keeping
-- Valuable patterns become reusable invariants
-- Future PRPs can reference: "Must satisfy INV-001, INV-003"
-- Prevents repeating the same mistakes across projects
 
 **Output (success):**
 ```
 ═══════════════════════════════════════════════════════
-  RALPH STEP 5
+  STEP 5: Create design system CSS
 ═══════════════════════════════════════════════════════
-Running step 5...
-✓ Step 5 executed
 
-Testing step 5...
-Test attempt 1 of 3...
-  [PASS] File exists
-  [PASS] Build passes
-  [PASS] TypeScript passes
-✓ Step 5 test passed!
+Executing step-05.sh...
+✓ Step executed
 
-Progress: 5/20 steps complete
-Next: ./ralph.sh 6
+Running test-05.sh...
+✓ All checks passed (12/12)
+
+Playwright verification /...
+  ✓ heading[1]: "SA DASHBOARD"
+  ✓ section: "KEY METRICS"
+✓ Playwright: 2/2 checks passed
+
+✓ Step 5 PASSED → Proceeding to Step 6
 ```
 
-**Output (failure with retry context):**
+**Output (failure with fix):**
 ```
 ═══════════════════════════════════════════════════════
-  RALPH STEP 5 - RETRY 2/3
+  STEP 5 - ATTEMPT 2/3
 ═══════════════════════════════════════════════════════
-Previous error: TypeError: Cannot read property 'id' of undefined
-Temperature: 0.1
 
-Running step 5 with failure context...
+Previous error: TypeError: calculate_health is not defined
+Analysis: Missing import in health_calculator.py
+Fix: Adding import statement...
+
+Re-running test-05.sh...
+✓ All checks passed
+
+✓ Step 5 PASSED (fixed on retry)
+Learning captured: "health_calculator needs explicit imports"
 ```
 
 ---
@@ -2393,6 +2349,7 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2 | 2026-01-23 | Ralph v2: Agent-driven execution, Playwright MCP integration, self-learning retry, dangerous mode |
 | 2.1 | 2026-01-20 | Ralph Methodology for atomic implementation (implement, run, gate, status commands) |
 | 2.0 | 2026-01-19 | Multi-agent architecture, continuous validation, examples library, thinking levels |
 | 1.0 | 2026-01-19 | Initial release with validate, prp, review, report commands |
@@ -2407,9 +2364,10 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 | `/design validate {spec}` | Check invariants | PASS/FAIL + fix suggestions |
 | `/design prp {spec}` | Generate PRP | Compiled PRP + quality score |
 | `/design implement {prp}` | Generate Ralph steps | Atomic steps + tests + gates |
-| `/design run [step]` | Execute with retry | Step result + progress |
+| `/design run [--dangerous]` | Agent-driven execution | Step result + Playwright verify |
 | `/design gate [n]` | Phase checkpoint | Gate pass/fail |
 | `/design status` | Implementation progress | Steps + gates status |
+| `/design learnings review` | Review captured learnings | Accept/Reject/Promote |
 | `/design review {spec} {impl}` | Check compliance | Coverage report |
 | `/design report {project}` | Status overview | Metrics + recommendations |
 | `/design orchestrate {spec}` | Full pipeline | Analysis → PRP → Review |
