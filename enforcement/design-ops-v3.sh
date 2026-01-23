@@ -323,12 +323,15 @@ require_review_acknowledgment() {
     if [[ ! -t 0 ]]; then
         echo ""
         echo -e "${RED}╔═══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${RED}║  HUMAN REVIEW REQUIRED - STOPPING                             ║${NC}"
+        echo -e "${RED}║  HUMAN REVIEW GATE - ALL ITEMS REQUIRE ACKNOWLEDGMENT         ║${NC}"
         echo -e "${RED}╚═══════════════════════════════════════════════════════════════╝${NC}"
         echo ""
         echo -e "  ${YELLOW}No interactive terminal detected.${NC}"
-        echo -e "  ${YELLOW}Review the suggestions above with the user before proceeding.${NC}"
-        echo -e "  ${CYAN}Re-run with --skip-review only after human approval.${NC}"
+        echo -e "  ${YELLOW}ALL items above (errors, warnings, suggestions) must be reviewed.${NC}"
+        echo ""
+        echo -e "  ${CYAN}To proceed after review:${NC}"
+        echo -e "  ${DIM}1. Review ALL items in the checklist above${NC}"
+        echo -e "  ${DIM}2. Re-run with --skip-review ONLY after human approval${NC}"
         echo ""
         return 1
     fi
@@ -431,9 +434,8 @@ Before responding:
 $prompt"
     fi
 
-    # Pass prompt as argument (piping hangs in some environments)
-    # CRITICAL: --no-session-persistence prevents context leaking from previous sessions
-    result=$(claude --model "$CLAUDE_MODEL" --no-session-persistence -p "$prompt" 2>/dev/null)
+    # Use piping for large prompts + --no-session-persistence to prevent context leaking
+    result=$(echo "$prompt" | claude --model "$CLAUDE_MODEL" --print --no-session-persistence 2>/dev/null)
 
     track_cost "$prompt" "$result"
     echo "$result"
@@ -2342,7 +2344,27 @@ except:
 cmd_implement() {
     local prp_file="$1"
     local output_dir="$2"
-    local phase="$3"  # Optional: generate only specific phase
+    local phase="$3"  # Optional: --parallel=N
+    
+    [[ ! -f "$prp_file" ]] && { echo -e "${RED}PRP file not found: $prp_file${NC}"; exit 1; }
+    
+    # Delegate to implement-incremental.sh (parallelized)
+    local script_dir
+    script_dir="$(dirname "${BASH_SOURCE[0]}")"
+    
+    local args=("$prp_file")
+    [[ -n "$output_dir" ]] && args+=("--output" "$output_dir")
+    [[ -n "$phase" ]] && args+=("$phase")  # Pass through --parallel=N
+    
+    exec "$script_dir/implement-incremental.sh" "${args[@]}"
+}
+
+# ============================================================================
+# IMPLEMENT-PREPARE: Prepare prompts for Claude Code direct generation
+# ============================================================================
+cmd_implement_prepare() {
+    local prp_file="$1"
+    local output_dir="$2"
 
     [[ ! -f "$prp_file" ]] && { echo -e "${RED}PRP file not found: $prp_file${NC}"; exit 1; }
 
@@ -2357,234 +2379,2154 @@ cmd_implement() {
         output_dir="./ralph-steps-${prp_name}"
     fi
 
-    # Calculate PRP hash for traceability (macOS compatible)
-    local prp_hash
+    mkdir -p "$output_dir/.prompts"
+
+    # Extract PRP metadata
+    local prp_id prp_hash
+    prp_id=$(echo "$prp_content" | grep -E "^prp_id:" | head -1 | sed 's/.*://' | xargs)
     if command -v md5sum &> /dev/null; then
         prp_hash=$(md5sum "$prp_file" | cut -c1-7)
     else
         prp_hash=$(md5 -q "$prp_file" | cut -c1-7)
     fi
 
-    echo ""
-    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║  RALPH STEP GENERATION (v$VERSION)                              ║${NC}"
-    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "PRP: ${CYAN}$prp_file${NC}"
-    echo -e "PRP Hash: ${CYAN}$prp_hash${NC}"
-    echo -e "Output: ${CYAN}$output_dir${NC}"
-    [[ -n "$phase" ]] && echo -e "Phase filter: ${CYAN}$phase${NC}"
-    echo ""
-
-    # Extract PRP metadata
-    echo -e "${CYAN}Extracting PRP metadata...${NC}"
-
-    local prp_id confidence thinking_level domains
-    prp_id=$(echo "$prp_content" | grep -E "^prp_id:|PRP ID:" | head -1 | sed 's/.*://' | xargs)
-    confidence=$(echo "$prp_content" | grep -E "Confidence.*Score|confidence_score|Confidence:" | head -1 | grep -oE "[0-9]+\.[0-9]+|[0-9]+" | head -1)
-    thinking_level=$(echo "$prp_content" | grep -E "Thinking Level|thinking_level" | head -1 | sed 's/.*://' | xargs)
-    domains=$(echo "$prp_content" | grep -E "^domain:|Domain:" | head -1 | sed 's/.*://' | xargs)
-
-    echo -e "  PRP ID: ${prp_id:-unknown}"
-    echo -e "  Confidence: ${confidence:-N/A}/10"
-    echo -e "  Thinking Level: ${thinking_level:-Normal}"
-    echo -e "  Domains: ${domains:-general}"
-
-    # Count deliverables and phases
-    local deliverable_count phase_count
-    deliverable_count=$(echo "$prp_content" | grep -cE "^### (F[0-9]+\.[0-9]+|Phase [0-9]+\.[0-9]+)" 2>/dev/null | head -1 || echo "0")
-    phase_count=$(echo "$prp_content" | grep -cE "^## Phase [0-9]+|^## [0-9]+\." 2>/dev/null | head -1 || echo "0")
-
-    echo -e "  Deliverables: $deliverable_count"
-    echo -e "  Phases: $phase_count"
-    echo ""
-
-    # Load prompt template
-    local prompt_template="$TEMPLATES_DIR/implement-prompt.md"
-    if [[ ! -f "$prompt_template" ]]; then
-        echo -e "${RED}Error: implement-prompt.md template not found${NC}"
-        echo -e "${YELLOW}Expected at: $prompt_template${NC}"
-        echo -e "${YELLOW}Create the template first, or use /design implement instructions from design.md${NC}"
-        exit 1
-    fi
-
-    # Build the prompt
-    echo -e "${CYAN}Generating Ralph steps...${NC}"
-    echo -e "${DIM}(This may take a minute for large PRPs)${NC}"
-
-    local prompt
-    prompt=$(cat "$prompt_template")
-    prompt="${prompt//\{\{PRP_CONTENT\}\}/$prp_content}"
-
-    # Add phase filter if specified
-    if [[ -n "$phase" ]]; then
-        prompt="$prompt
-
-PHASE FILTER: Generate only Phase $phase steps, tests, and gate.
-Skip other phases."
-    fi
-
-    # Call Claude
-    local result
-    # Pass prompt as argument (piping hangs in some environments)
-    # CRITICAL: --no-session-persistence prevents context leaking from previous sessions
-    result=$(claude --model "$CLAUDE_MODEL" --no-session-persistence -p "$prompt" 2>/dev/null)
-
-    track_cost "$prompt" "$result"
-
-    # === DESCRIBE VS DO DETECTION ===
-    # Detect if LLM summarized instead of outputting files
-    is_summary_output() {
-        local response="$1"
-        local first_200
-        first_200=$(echo "$response" | head -c 200 | tr '[:upper:]' '[:lower:]')
-
-        # Summary signals - LLM described instead of did
-        if [[ "$first_200" =~ "i have successfully generated" ]] || \
-           [[ "$first_200" =~ "i would create" ]] || \
-           [[ "$first_200" =~ "the files would contain" ]] || \
-           [[ "$first_200" =~ "here's what each file" ]] || \
-           [[ "$first_200" =~ "this implementation" ]] || \
-           [[ "$first_200" =~ "let me generate" ]] || \
-           [[ "$first_200" =~ "i'll create" ]] || \
-           [[ "$first_200" =~ "continue from" ]] || \
-           [[ "$first_200" =~ "left off" ]] || \
-           [[ "$first_200" =~ "picking up where" ]] || \
-           [[ "$first_200" =~ "continuing with step" ]]; then
-            return 0  # Is summary or continuation (invalid)
-        fi
-
-        # Check if first non-empty line starts with file delimiter
-        local first_content_line
-        first_content_line=$(echo "$response" | grep -v '^$' | head -1)
-        if [[ ! "$first_content_line" =~ ^===\ FILE: ]]; then
-            # Might be summary - check if ANY file delimiters exist
-            if ! echo "$response" | grep -q "^=== FILE:"; then
-                return 0  # No file delimiters at all = summary
-            fi
-        fi
-
-        return 1  # Not summary
-    }
-
-    # Retry with stronger prompt if summary detected
-    local retry_count=0
-    local max_retries=2
-
-    while is_summary_output "$result" && [[ $retry_count -lt $max_retries ]]; do
-        ((retry_count++))
-        echo -e "${YELLOW}⚠ Detected 'describe' output instead of 'do' output. Retrying ($retry_count/$max_retries)...${NC}"
-
-        # Stronger prompt for retry
-        local retry_prompt="$prompt
-
----
-CRITICAL: Your previous response DESCRIBED the files instead of OUTPUTTING them.
-
-THIS IS WRONG. You must OUTPUT THE ACTUAL FILE CONTENTS.
-
-START YOUR RESPONSE WITH EXACTLY:
-=== FILE: PRP-COVERAGE.md ===
-
-NO preamble. NO explanation. NO summary. JUST THE FILES.
-
-BEGIN NOW:"
-
-        result=$(claude --model "$CLAUDE_MODEL" --no-session-persistence -p "$retry_prompt" 2>/dev/null)
-        track_cost "$retry_prompt" "$result"
-    done
-
-    if is_summary_output "$result"; then
-        echo -e "${RED}✗ LLM produced summary output after $max_retries retries${NC}"
-        echo -e "${YELLOW}  Raw output saved for manual review${NC}"
-    fi
-    # === END DESCRIBE VS DO DETECTION ===
-
-    # Create output directory
-    mkdir -p "$output_dir"
-
-    # Save raw generation for debugging
-    echo "$result" > "$output_dir/.generation-raw.md"
-
-    # Parse and save files from result
-    # Expected format in result: === FILE: filename.sh ===
-    local current_file=""
-    local file_content=""
-    local files_created=0
+    # =========================================================================
+    # Extract Success Criteria from Section 2
+    # =========================================================================
+    # Supports two formats:
+    # 1. | ID | Criterion | Metric |  (SC-N.N format)
+    # 2. | Metric | Target | Measurement | (generate SC-N.N from row number)
+    local success_criteria=()
+    local in_success_criteria=0
+    local sc_row=0
+    local sc_format=""  # "id_first" or "metric_first"
 
     while IFS= read -r line; do
-        if [[ "$line" =~ ^===\ FILE:\ (.+)\ ===$ ]]; then
-            # Save previous file if exists
-            if [[ -n "$current_file" && -n "$file_content" ]]; then
-                echo "$file_content" > "$output_dir/$current_file"
-                [[ "$current_file" == *.sh ]] && chmod +x "$output_dir/$current_file"
-                ((files_created++))
-            fi
-            current_file="${BASH_REMATCH[1]}"
-            file_content=""
-        elif [[ "$line" == "=== END FILE ===" ]]; then
-            if [[ -n "$current_file" && -n "$file_content" ]]; then
-                echo "$file_content" > "$output_dir/$current_file"
-                [[ "$current_file" == *.sh ]] && chmod +x "$output_dir/$current_file"
-                ((files_created++))
-            fi
-            current_file=""
-            file_content=""
-        elif [[ -n "$current_file" ]]; then
-            file_content+="$line"$'\n'
+        # Detect Section 2 header
+        if [[ "$line" =~ ^##\ 2\.\ Success\ Criteria ]] || [[ "$line" =~ ^##\ 2\ Success\ Criteria ]]; then
+            in_success_criteria=1
+            continue
         fi
-    done <<< "$result"
 
-    # Save any remaining file
-    if [[ -n "$current_file" && -n "$file_content" ]]; then
-        echo "$file_content" > "$output_dir/$current_file"
-        [[ "$current_file" == *.sh ]] && chmod +x "$output_dir/$current_file"
-        ((files_created++))
+        # Exit when hitting next section
+        if [[ $in_success_criteria -eq 1 && "$line" =~ ^##\ [0-9] ]]; then
+            in_success_criteria=0
+        fi
+
+        # Skip header separator
+        [[ "$line" =~ ^\|-+\| ]] && continue
+
+        # Detect format from header row
+        if [[ $in_success_criteria -eq 1 && "$line" =~ ^\|.*ID.*Criterion ]]; then
+            sc_format="id_first"
+            continue
+        fi
+        if [[ $in_success_criteria -eq 1 && "$line" =~ ^\|.*Metric.*Target ]]; then
+            sc_format="metric_first"
+            continue
+        fi
+
+        # Parse table rows
+        if [[ $in_success_criteria -eq 1 && "$line" =~ ^\|[^-] ]]; then
+            # Remove leading/trailing pipes and split
+            local row
+            row=$(echo "$line" | sed 's/^|//;s/|$//' | sed 's/|/\t/g')
+
+            if [[ "$sc_format" == "id_first" ]]; then
+                # Format: | SC-1.1 | Criterion | Metric |
+                local sc_id sc_criterion sc_metric
+                sc_id=$(echo "$row" | cut -f1 | xargs)
+                sc_criterion=$(echo "$row" | cut -f2 | xargs)
+                sc_metric=$(echo "$row" | cut -f3 | xargs)
+                [[ -n "$sc_id" && "$sc_id" != "ID" ]] && success_criteria+=("$sc_id|$sc_criterion|$sc_metric")
+            elif [[ "$sc_format" == "metric_first" ]]; then
+                # Format: | Metric | Target | Measurement |
+                # Generate SC-G.N (G = Global, applies to all phases)
+                sc_row=$((sc_row + 1))
+                local sc_metric sc_target sc_measurement
+                sc_metric=$(echo "$row" | cut -f1 | xargs)
+                sc_target=$(echo "$row" | cut -f2 | xargs)
+                sc_measurement=$(echo "$row" | cut -f3 | xargs)
+                [[ -n "$sc_metric" && "$sc_metric" != "Metric" ]] && success_criteria+=("SC-G.${sc_row}|$sc_metric: $sc_target|$sc_measurement")
+            fi
+        fi
+    done < "$prp_file"
+
+    # =========================================================================
+    # Extract Global Validation Commands from Section 8
+    # =========================================================================
+    local global_validation_commands=()
+    local in_validation_section=0
+    local in_code_block=0
+
+    while IFS= read -r line; do
+        # Detect Section 8 header
+        if [[ "$line" =~ ^##\ 8\.\ Validation\ Commands ]] || [[ "$line" =~ ^##\ [0-9]+\.\ Validation\ Commands ]]; then
+            in_validation_section=1
+            continue
+        fi
+
+        # Exit when hitting next section
+        if [[ $in_validation_section -eq 1 && "$line" =~ ^##\ [0-9] && ! "$line" =~ Validation ]]; then
+            in_validation_section=0
+        fi
+
+        # Track code blocks
+        if [[ $in_validation_section -eq 1 ]]; then
+            if [[ "$line" =~ ^\`\`\`bash ]]; then
+                in_code_block=1
+                continue
+            fi
+            if [[ "$line" =~ ^\`\`\` && $in_code_block -eq 1 ]]; then
+                in_code_block=0
+                continue
+            fi
+            # Capture commands (skip comments and empty lines)
+            if [[ $in_code_block -eq 1 && -n "$line" && ! "$line" =~ ^#.*Expected ]]; then
+                global_validation_commands+=("$line")
+            fi
+        fi
+    done < "$prp_file"
+
+    # =========================================================================
+    # Extract Deliverables, Phases, and Per-Phase Validation Commands
+    # =========================================================================
+    local deliverables=()
+    local phases=()
+    local phase_validation_commands=()  # Indexed by phase number
+    local in_deliverables=0
+    local in_phase_code_block=0
+    local current_phase=""
+    local current_phase_num=""
+    local current_phase_cmds=""
+
+    while IFS= read -r line; do
+        # Stop processing phases when hitting a major section (## N.)
+        if [[ "$line" =~ ^##\ [0-9]+\. && ! "$line" =~ Timeline ]]; then
+            # Save final phase's commands before exiting
+            if [[ -n "$current_phase_num" && -n "$current_phase_cmds" ]]; then
+                phase_validation_commands+=("$current_phase_num|$current_phase_cmds")
+                current_phase_num=""
+                current_phase_cmds=""
+            fi
+            continue
+        fi
+
+        if [[ "$line" =~ ^###\ Phase\ ([0-9]+):\ (.+) ]]; then
+            # Save previous phase's validation commands
+            if [[ -n "$current_phase_num" && -n "$current_phase_cmds" ]]; then
+                phase_validation_commands+=("$current_phase_num|$current_phase_cmds")
+            fi
+
+            current_phase_num="${BASH_REMATCH[1]}"
+            current_phase="${BASH_REMATCH[1]}: ${BASH_REMATCH[2]}"
+            current_phase_cmds=""
+
+            # Track unique phases
+            local phase_exists=0
+            for p in "${phases[@]}"; do
+                [[ "$p" == "$current_phase" ]] && phase_exists=1 && break
+            done
+            [[ $phase_exists -eq 0 ]] && phases+=("$current_phase")
+            in_deliverables=0
+            in_phase_code_block=0
+        fi
+
+        # Match both **Deliverables:** and #### Deliverables formats
+        if [[ "$line" == "**Deliverables:**" || "$line" =~ ^#{1,4}[[:space:]]*Deliverables ]]; then
+            in_deliverables=1
+            continue
+        fi
+
+        # End deliverables section on next heading, bold section, or empty line
+        if [[ $in_deliverables -eq 1 && ("$line" == "**Validation Gate:**" || "$line" =~ ^\*\* || "$line" =~ ^### || "$line" =~ ^#### || -z "$line") ]]; then
+            in_deliverables=0
+        fi
+
+        if [[ $in_deliverables -eq 1 && "$line" =~ ^-\ (.+) ]]; then
+            local deliverable="${BASH_REMATCH[1]}"
+            # Strip checkbox markers [ ] if present
+            deliverable="${deliverable#\[ \] }"
+            deliverable="${deliverable#\[\] }"
+            deliverables+=("$current_phase|$deliverable")
+        fi
+
+        # Capture per-phase validation commands (code blocks after deliverables, within phases only)
+        if [[ -n "$current_phase_num" && "$line" =~ ^\`\`\`bash ]]; then
+            in_phase_code_block=1
+            continue
+        fi
+        if [[ "$line" =~ ^\`\`\` && $in_phase_code_block -eq 1 ]]; then
+            in_phase_code_block=0
+            continue
+        fi
+        if [[ $in_phase_code_block -eq 1 && -n "$line" && ! "$line" =~ ^#.*Expected ]]; then
+            [[ -n "$current_phase_cmds" ]] && current_phase_cmds="$current_phase_cmds;"
+            current_phase_cmds="${current_phase_cmds}${line}"
+        fi
+    done < "$prp_file"
+
+    # Save last phase's validation commands
+    if [[ -n "$current_phase_num" && -n "$current_phase_cmds" ]]; then
+        phase_validation_commands+=("$current_phase_num|$current_phase_cmds")
     fi
 
-    # Copy ralph runner template if it exists
-    if [[ -f "$TEMPLATES_DIR/ralph-runner.sh" && ! -f "$output_dir/ralph.sh" ]]; then
-        local runner_content
-        runner_content=$(cat "$TEMPLATES_DIR/ralph-runner.sh")
-        runner_content="${runner_content//\{\{PRP_ID\}\}/$prp_id}"
-        runner_content="${runner_content//\{\{PRP_HASH\}\}/$prp_hash}"
-        echo "$runner_content" > "$output_dir/ralph.sh"
-        chmod +x "$output_dir/ralph.sh"
-        ((files_created++))
-    fi
+    local total=${#deliverables[@]}
+    local total_phases=${#phases[@]}
 
-    echo ""
-    if [[ $files_created -gt 0 ]]; then
-        echo -e "${GREEN}Generated $files_created files in $output_dir${NC}"
-    else
-        echo -e "${YELLOW}Warning: No files were parsed from LLM output${NC}"
-        echo -e "${YELLOW}Check $output_dir/.generation-raw.md for raw output${NC}"
-        echo -e "${YELLOW}The LLM may not have used the expected === FILE: xxx === format${NC}"
-    fi
+    [[ $total -eq 0 ]] && { echo -e "${RED}No deliverables found in PRP${NC}"; exit 1; }
 
-    # List generated files
-    echo ""
-    echo -e "Generated files:"
-    ls -la "$output_dir"/*.sh "$output_dir"/*.md 2>/dev/null | while read -r line; do
-        echo -e "  $line"
+    # Generate individual prompt files
+    for i in "${!deliverables[@]}"; do
+        local step_num=$((i + 1))
+        local step_padded=$(printf "%02d" $step_num)
+        IFS='|' read -r phase deliverable <<< "${deliverables[$i]}"
+
+        # Extract phase number
+        local phase_num
+        phase_num=$(echo "$phase" | cut -d: -f1 | xargs)
+
+        # Build acceptance criteria section from extracted success_criteria
+        # Include both phase-specific (SC-N.x) and global (SC-G.x) criteria
+        local criteria_section=""
+        for sc in "${success_criteria[@]}"; do
+            local sc_id sc_criterion sc_metric
+            IFS='|' read -r sc_id sc_criterion sc_metric <<< "$sc"
+            # Match SC-N.x where N is the phase number, OR SC-G.x (global)
+            if [[ "$sc_id" =~ ^SC-${phase_num}\. ]] || [[ "$sc_id" =~ ^SC-G\. ]]; then
+                criteria_section="${criteria_section}# ${sc_id}: ${sc_criterion} | ${sc_metric}
+"
+            fi
+        done
+
+        # Build validation commands section for this phase
+        local validation_section=""
+        for pvc in "${phase_validation_commands[@]}"; do
+            local pnum pcmds
+            IFS='|' read -r pnum pcmds <<< "$pvc"
+            if [[ "$pnum" == "$phase_num" ]]; then
+                IFS=';' read -ra cmds <<< "$pcmds"
+                for cmd in "${cmds[@]}"; do
+                    [[ -n "$cmd" ]] && validation_section="${validation_section}# ${cmd}
+"
+                done
+            fi
+        done
+
+        cat > "$output_dir/.prompts/step-${step_padded}.prompt.md" << PROMPT_EOF
+# Generate Step ${step_padded}
+
+## Context
+- PRP ID: ${prp_id:-unknown}
+- PRP Hash: ${prp_hash}
+- Phase: ${phase}
+- Step Number: ${step_num}
+- Deliverable: ${deliverable}
+
+## Success Criteria (EXTRACTED FROM PRP - use VERBATIM)
+${criteria_section:-# No criteria found for this phase - generate appropriate SC-${phase_num}.N criteria}
+
+## Validation Commands (EXTRACTED FROM PRP)
+${validation_section:-# No validation commands for this phase}
+
+## Task
+Generate \`step-${step_padded}.sh\` implementing this deliverable.
+
+## Required Output Format (EXACT - all sections required)
+\`\`\`bash
+#!/bin/bash
+# ==============================================================================
+# Step ${step_num}: ${deliverable}
+# ==============================================================================
+# PRP: ${prp_id:-unknown}
+# PRP Hash: ${prp_hash}
+# PRP Phase: Phase ${phase}
+# PRP Deliverable: ${deliverable}
+#
+# Invariants Applied:
+#   - #1 (Ambiguity): No vague terms, specific implementation
+#   - #7 (Validation): Testable outputs
+#
+# Thinking Level: Normal
+# Confidence: 7/10 (Medium)
+# ==============================================================================
+
+set -e
+
+echo "Step ${step_num}: ${deliverable}"
+
+# === OBJECTIVE ===
+# ${deliverable}
+
+# === ACCEPTANCE CRITERIA (from PRP Section 2) ===
+${criteria_section:-# SC-${phase_num}.1: [criterion]}
+
+# === IMPLEMENTATION ===
+# [Your implementation here - actual code, not placeholders]
+
+echo "Step ${step_num} complete"
+\`\`\`
+
+## Rules
+1. Generate actual implementation code, not placeholders
+2. Be specific about files to create/modify
+3. Include working code snippets
+4. Reference the deliverable exactly
+5. MUST include "Invariants Applied:" section in header
+6. MUST include "Thinking Level:" and "Confidence:" in header
+7. MUST include "=== ACCEPTANCE CRITERIA ===" section with criteria from above
+PROMPT_EOF
     done
 
-    # Run ralph-check automatically if files were generated
-    if [[ $files_created -gt 0 ]]; then
-        echo ""
-        echo -e "${CYAN}Running ralph-check to verify format compliance...${NC}"
-        echo ""
+    # Generate test prompt template
+    cat > "$output_dir/.prompts/tests.prompt.md" << 'TEST_PROMPT_EOF'
+# Generate Test Files
 
-        cmd_ralph_check "$prp_file" "$output_dir" "true"
+For each step-NN.sh, generate a corresponding test-NN.sh with this EXACT structure:
+
+```bash
+#!/bin/bash
+# ==============================================================================
+# Test NN: [deliverable]
+# ==============================================================================
+# PRP: [prp_id]
+# PRP Phase: [Phase N]
+# Success Criteria Tested: SC-N.1, SC-N.2
+# Invariants Verified: #1, #7
+# ==============================================================================
+
+set -e
+
+PASS=0
+FAIL=0
+
+check() {
+    if eval "$1"; then
+        echo "  [PASS] $2"
+        PASS=$((PASS + 1))
+    else
+        echo "  [FAIL] $2"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+echo "Testing Step NN: [deliverable]"
+
+# === PRP SUCCESS CRITERIA (VERBATIM from PRP Section 2) ===
+# SC-N.1: [exact text from PRP]
+# SC-N.2: [exact text from PRP]
+# === END PRP CRITERIA ===
+
+# === FILE EXISTENCE CHECKS ===
+check "test -f <expected_file>" "SC-N.1: File exists"
+
+# === CONTENT CHECKS ===
+check "grep -q '<expected_content>' <file>" "SC-N.2: Content correct"
+
+# === PRP VALIDATION COMMANDS (VERBATIM from PRP Appendix) ===
+# [Copy validation commands from PRP if any]
+# === END VERBATIM ===
+
+# === INVARIANT #7: Validation Executable ===
+check "true" "Invariant #7: All checks are executable"
+
+# === PLAYWRIGHT VERIFICATION (if UI step) ===
+cat << 'PLAYWRIGHT_VERIFY'
+{
+  "route": "/path",
+  "prp_phase": "N.M",
+  "prp_criteria": ["SC-N.1"],
+  "checks": [
+    { "type": "heading", "level": 1, "text": "Expected Title" }
+  ]
+}
+PLAYWRIGHT_VERIFY
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed"
+[[ $FAIL -eq 0 ]] || exit 1
+```
+
+## REQUIRED Sections (all must be present):
+1. `# === PRP SUCCESS CRITERIA (VERBATIM from PRP Section 2) ===`
+2. `# === PRP VALIDATION COMMANDS (VERBATIM from PRP Appendix) ===`
+3. `PLAYWRIGHT_VERIFY` JSON block (even if empty for non-UI steps)
+4. Invariant-specific checks (reference by number)
+TEST_PROMPT_EOF
+
+    # Generate manifest JSON
+    local manifest_file="$output_dir/.manifest.json"
+
+    # Helper function to get phase validation commands
+    get_phase_validation() {
+        local phase_num="$1"
+        for pvc in "${phase_validation_commands[@]}"; do
+            local pnum pcmds
+            IFS='|' read -r pnum pcmds <<< "$pvc"
+            if [[ "$pnum" == "$phase_num" ]]; then
+                echo "$pcmds"
+                return
+            fi
+        done
+        echo ""
+    }
+
+    # Helper function to get success criteria for a phase
+    # Includes both phase-specific (SC-N.x) and global (SC-G.x) criteria
+    get_phase_criteria() {
+        local phase_num="$1"
+        local criteria=""
+        for sc in "${success_criteria[@]}"; do
+            local sc_id sc_crit sc_metric
+            IFS='|' read -r sc_id sc_crit sc_metric <<< "$sc"
+            # Match SC-N.x where N is the phase number, OR SC-G.x (global)
+            if [[ "$sc_id" =~ ^SC-${phase_num}\. ]] || [[ "$sc_id" =~ ^SC-G\. ]]; then
+                [[ -n "$criteria" ]] && criteria="$criteria,"
+                criteria="${criteria}\"$sc_id\""
+            fi
+        done
+        echo "$criteria"
+    }
+
+    # Build JSON manually (no jq dependency)
+    echo "{" > "$manifest_file"
+    echo "  \"prp_id\": \"${prp_id:-unknown}\"," >> "$manifest_file"
+    echo "  \"prp_hash\": \"${prp_hash}\"," >> "$manifest_file"
+    echo "  \"prp_file\": \"$(realpath "$prp_file")\"," >> "$manifest_file"
+    echo "  \"output_dir\": \"$(realpath "$output_dir")\"," >> "$manifest_file"
+    echo "  \"total_steps\": ${total}," >> "$manifest_file"
+    echo "  \"total_phases\": ${total_phases}," >> "$manifest_file"
+
+    # Success criteria array
+    echo "  \"success_criteria\": [" >> "$manifest_file"
+    for i in "${!success_criteria[@]}"; do
+        local sc_id sc_criterion sc_metric
+        IFS='|' read -r sc_id sc_criterion sc_metric <<< "${success_criteria[$i]}"
+        local comma=","
+        [[ $i -eq $((${#success_criteria[@]} - 1)) ]] && comma=""
+        # Escape quotes
+        sc_criterion=$(echo "$sc_criterion" | sed 's/"/\\"/g')
+        sc_metric=$(echo "$sc_metric" | sed 's/"/\\"/g')
+        echo "    {" >> "$manifest_file"
+        echo "      \"id\": \"${sc_id}\"," >> "$manifest_file"
+        echo "      \"criterion\": \"${sc_criterion}\"," >> "$manifest_file"
+        echo "      \"metric\": \"${sc_metric}\"" >> "$manifest_file"
+        echo "    }${comma}" >> "$manifest_file"
+    done
+    echo "  ]," >> "$manifest_file"
+
+    # Global validation commands array
+    echo "  \"global_validation_commands\": [" >> "$manifest_file"
+    for i in "${!global_validation_commands[@]}"; do
+        local cmd="${global_validation_commands[$i]}"
+        local comma=","
+        [[ $i -eq $((${#global_validation_commands[@]} - 1)) ]] && comma=""
+        # Escape quotes and backslashes
+        cmd=$(echo "$cmd" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        echo "    \"${cmd}\"${comma}" >> "$manifest_file"
+    done
+    echo "  ]," >> "$manifest_file"
+
+    # Phases array
+    echo "  \"phases\": [" >> "$manifest_file"
+    for i in "${!phases[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#phases[@]} - 1)) ]] && comma=""
+        echo "    \"${phases[$i]}\"${comma}" >> "$manifest_file"
+    done
+    echo "  ]," >> "$manifest_file"
+
+    # Deliverables array with linked criteria and validation commands
+    echo "  \"deliverables\": [" >> "$manifest_file"
+    for i in "${!deliverables[@]}"; do
+        local step_num=$((i + 1))
+        local step_padded=$(printf "%02d" $step_num)
+        IFS='|' read -r phase deliverable <<< "${deliverables[$i]}"
+        local comma=","
+        [[ $i -eq $((${#deliverables[@]} - 1)) ]] && comma=""
+
+        # Extract phase number from "N: Title"
+        local phase_num
+        phase_num=$(echo "$phase" | cut -d: -f1 | xargs)
+
+        # Get linked success criteria for this phase
+        local linked_criteria
+        linked_criteria=$(get_phase_criteria "$phase_num")
+
+        # Get validation commands for this phase
+        local phase_cmds
+        phase_cmds=$(get_phase_validation "$phase_num")
+
+        # Escape quotes in deliverable
+        deliverable=$(echo "$deliverable" | sed 's/"/\\"/g')
+
+        echo "    {" >> "$manifest_file"
+        echo "      \"step\": ${step_num}," >> "$manifest_file"
+        echo "      \"step_padded\": \"${step_padded}\"," >> "$manifest_file"
+        echo "      \"phase\": \"${phase}\"," >> "$manifest_file"
+        echo "      \"phase_num\": ${phase_num}," >> "$manifest_file"
+        echo "      \"deliverable\": \"${deliverable}\"," >> "$manifest_file"
+        echo "      \"success_criteria\": [${linked_criteria}]," >> "$manifest_file"
+        if [[ -n "$phase_cmds" ]]; then
+            # Split by ; and output as array
+            echo -n "      \"validation_commands\": [" >> "$manifest_file"
+            local first=1
+            IFS=';' read -ra cmds <<< "$phase_cmds"
+            for cmd in "${cmds[@]}"; do
+                [[ -z "$cmd" ]] && continue
+                cmd=$(echo "$cmd" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | xargs)
+                [[ $first -eq 0 ]] && echo -n ", " >> "$manifest_file"
+                echo -n "\"$cmd\"" >> "$manifest_file"
+                first=0
+            done
+            echo "]," >> "$manifest_file"
+        else
+            echo "      \"validation_commands\": []," >> "$manifest_file"
+        fi
+        echo "      \"prompt_file\": \".prompts/step-${step_padded}.prompt.md\"," >> "$manifest_file"
+        echo "      \"output_file\": \"step-${step_padded}.sh\"," >> "$manifest_file"
+        echo "      \"test_file\": \"test-${step_padded}.sh\"" >> "$manifest_file"
+        echo "    }${comma}" >> "$manifest_file"
+    done
+    echo "  ]" >> "$manifest_file"
+    echo "}" >> "$manifest_file"
+
+    # Output summary
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  IMPLEMENT-PREPARE COMPLETE                                   ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "PRP:        ${CYAN}${prp_file}${NC}"
+    echo -e "Output:     ${CYAN}${output_dir}${NC}"
+    echo -e "Manifest:   ${CYAN}${output_dir}/.manifest.json${NC}"
+    echo -e "Prompts:    ${CYAN}${total} step prompts in .prompts/${NC}"
+    echo -e "Phases:     ${CYAN}${total_phases}${NC}"
+    echo -e "Criteria:   ${CYAN}${#success_criteria[@]} success criteria extracted${NC}"
+    echo -e "Commands:   ${CYAN}${#global_validation_commands[@]} global + ${#phase_validation_commands[@]} per-phase${NC}"
+    echo ""
+    echo -e "${YELLOW}Ready for Claude Code direct generation.${NC}"
+    echo -e "Run: ${CYAN}/implement ${prp_file} --output ${output_dir}${NC}"
+}
+
+# ============================================================================
+# SPEC-PREPARE: Extract user journey content for spec generation
+# Output: manifest.json with journey steps, personas, pain points
+# Claude Code uses this to generate spec directly (no nested CLI)
+# ============================================================================
+cmd_spec_prepare() {
+    local journey_file="$1"
+    local output_dir="$2"
+    local personas_dir="$3"
+    local research_dir="$4"
+
+    [[ ! -f "$journey_file" ]] && { echo -e "${RED}Journey file not found: $journey_file${NC}"; exit 1; }
+
+    # Resolve absolute path
+    journey_file=$(cd "$(dirname "$journey_file")" && pwd)/$(basename "$journey_file")
+
+    local journey_name
+    journey_name=$(basename "$journey_file" .md)
+
+    # Default output directory
+    if [[ -z "$output_dir" ]]; then
+        output_dir="${journey_file%/*}/../specs/.spec-from-${journey_name}"
     fi
 
-    echo ""
-    echo -e "${CYAN}Next steps:${NC}"
-    echo -e "  1. Review generated files in $output_dir"
-    echo -e "  2. Fix any ralph-check issues"
-    echo -e "  3. Run: cd $output_dir && ./ralph.sh 1"
+    mkdir -p "$output_dir"
 
-    show_cost_summary
+    local journey_content
+    journey_content=$(cat "$journey_file")
+
+    # =========================================================================
+    # Extract Journey Structure
+    # =========================================================================
+
+    # Extract title (first H1)
+    local journey_title
+    journey_title=$(echo "$journey_content" | grep -m1 "^# " | sed 's/^# //')
+
+    # Extract persona references
+    local personas_found=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && personas_found+=("$line")
+    done < <(echo "$journey_content" | grep -ioE "persona:[[:space:]]*[^,\n]+" | sed 's/persona:[[:space:]]*//' | sort -u)
+
+    # Extract steps (numbered items or H2/H3 sections)
+    local steps_count=0
+    steps_count=$(echo "$journey_content" | grep -cE "^[0-9]+\.|^##|^###" || echo "0")
+
+    # Extract pain points (look for "pain", "friction", "problem", "issue", "frustrat")
+    local pain_points=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && pain_points+=("$line")
+    done < <(echo "$journey_content" | grep -iE "pain|friction|problem|issue|frustrat" | head -10)
+
+    # Extract goals/outcomes (look for "goal", "outcome", "success", "want", "need")
+    local goals=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && goals+=("$line")
+    done < <(echo "$journey_content" | grep -iE "goal|outcome|success|want to|need to|should be able" | head -10)
+
+    # Extract touchpoints/systems mentioned
+    local systems=()
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && systems+=("$line")
+    done < <(echo "$journey_content" | grep -ioE "system|api|database|ui|interface|service|endpoint|component" | sort -u | head -10)
+
+    # =========================================================================
+    # Find Related Files
+    # =========================================================================
+    local journey_dir
+    journey_dir=$(dirname "$journey_file")
+    local design_dir="${journey_dir}/.."
+
+    # Find persona files
+    local persona_files=()
+    if [[ -n "$personas_dir" && -d "$personas_dir" ]]; then
+        while IFS= read -r f; do
+            [[ -n "$f" ]] && persona_files+=("$f")
+        done < <(find "$personas_dir" -name "*.md" -type f 2>/dev/null)
+    elif [[ -d "${design_dir}/personas" ]]; then
+        while IFS= read -r f; do
+            [[ -n "$f" ]] && persona_files+=("$f")
+        done < <(find "${design_dir}/personas" -name "*.md" -type f 2>/dev/null)
+    fi
+
+    # Find research files
+    local research_files=()
+    if [[ -n "$research_dir" && -d "$research_dir" ]]; then
+        while IFS= read -r f; do
+            [[ -n "$f" ]] && research_files+=("$f")
+        done < <(find "$research_dir" -name "*.md" -type f 2>/dev/null)
+    elif [[ -d "${design_dir}/research" ]]; then
+        while IFS= read -r f; do
+            [[ -n "$f" ]] && research_files+=("$f")
+        done < <(find "${design_dir}/research" -name "*.md" -type f 2>/dev/null)
+    fi
+
+    # Find other journey files (for context)
+    local other_journeys=()
+    while IFS= read -r f; do
+        [[ -n "$f" && "$f" != "$journey_file" ]] && other_journeys+=("$f")
+    done < <(find "$journey_dir" -name "*.md" -type f 2>/dev/null)
+
+    # =========================================================================
+    # Determine Spec Output Path
+    # =========================================================================
+    local spec_output_file
+    local specs_dir="${design_dir}/specs"
+    mkdir -p "$specs_dir"
+
+    # Convert journey name to spec name
+    local spec_name
+    spec_name=$(echo "$journey_name" | sed 's/-journey$//' | sed 's/_journey$//' | sed 's/journey-//' | sed 's/journey_//')
+    spec_output_file="${specs_dir}/${spec_name}-spec.md"
+
+    # =========================================================================
+    # Generate Manifest
+    # =========================================================================
+    local journey_hash
+    journey_hash=$(git hash-object "$journey_file" 2>/dev/null | head -c 7 || md5 -q "$journey_file" 2>/dev/null | head -c 7 || echo "unknown")
+
+    local manifest_file="$output_dir/.manifest.json"
+
+    # Build personas JSON array
+    local personas_json="["
+    local first=true
+    for p in "${personas_found[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            personas_json+="\"$p\""
+            first=false
+        else
+            personas_json+=",\"$p\""
+        fi
+    done
+    personas_json+="]"
+
+    # Build persona files JSON array
+    local persona_files_json="["
+    first=true
+    for f in "${persona_files[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            persona_files_json+="\"$f\""
+            first=false
+        else
+            persona_files_json+=",\"$f\""
+        fi
+    done
+    persona_files_json+="]"
+
+    # Build research files JSON array
+    local research_files_json="["
+    first=true
+    for f in "${research_files[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            research_files_json+="\"$f\""
+            first=false
+        else
+            research_files_json+=",\"$f\""
+        fi
+    done
+    research_files_json+="]"
+
+    # Build pain points JSON array
+    local pain_points_json="["
+    first=true
+    for p in "${pain_points[@]}"; do
+        # Escape quotes and newlines
+        local escaped
+        escaped=$(echo "$p" | sed 's/"/\\"/g' | tr '\n' ' ')
+        if [[ "$first" == "true" ]]; then
+            pain_points_json+="\"$escaped\""
+            first=false
+        else
+            pain_points_json+=",\"$escaped\""
+        fi
+    done
+    pain_points_json+="]"
+
+    # Build goals JSON array
+    local goals_json="["
+    first=true
+    for g in "${goals[@]}"; do
+        local escaped
+        escaped=$(echo "$g" | sed 's/"/\\"/g' | tr '\n' ' ')
+        if [[ "$first" == "true" ]]; then
+            goals_json+="\"$escaped\""
+            first=false
+        else
+            goals_json+=",\"$escaped\""
+        fi
+    done
+    goals_json+="]"
+
+    cat > "$manifest_file" << EOF
+{
+  "journey_file": "$journey_file",
+  "journey_hash": "$journey_hash",
+  "journey_title": "$journey_title",
+  "output_dir": "$output_dir",
+  "spec_output_file": "$spec_output_file",
+  "created_date": "$(date +%Y-%m-%d)",
+  "extracted": {
+    "steps_count": $steps_count,
+    "personas_referenced": $personas_json,
+    "pain_points": $pain_points_json,
+    "goals": $goals_json,
+    "systems_mentioned": ${#systems[@]}
+  },
+  "related_files": {
+    "persona_files": $persona_files_json,
+    "research_files": $research_files_json,
+    "other_journeys": ${#other_journeys[@]}
+  },
+  "spec_template": {
+    "sections": [
+      "Problem Statement (from pain points)",
+      "Scope (bounded by journey steps)",
+      "Functional Requirements (one per major journey step)",
+      "Non-Functional Requirements (performance, security)",
+      "Success Criteria (measurable, from goals)",
+      "Failure Modes (edge cases, errors)",
+      "Dependencies",
+      "Test Verification"
+    ],
+    "naming_convention": "FR-XX for functional requirements",
+    "success_criteria_format": "| ID | Criterion | Metric | Target |"
+  },
+  "generation_prompt": {
+    "context": "journey_to_spec",
+    "instructions": [
+      "Generate a complete specification from the user journey",
+      "Each major journey step becomes a functional requirement",
+      "Pain points inform the problem statement",
+      "Goals become measurable success criteria",
+      "Include failure modes for each requirement",
+      "Add non-functional requirements (latency, accessibility)",
+      "Include test verification section with specific commands"
+    ],
+    "output_format": "markdown spec following design-ops template"
+  }
+}
+EOF
+
+    # Copy journey content for Claude Code to analyze
+    cp "$journey_file" "$output_dir/journey-content.md"
+
+    # Copy persona files if found
+    if [[ ${#persona_files[@]} -gt 0 ]]; then
+        mkdir -p "$output_dir/personas"
+        for f in "${persona_files[@]}"; do
+            cp "$f" "$output_dir/personas/" 2>/dev/null
+        done
+    fi
+
+    # Copy research files if found
+    if [[ ${#research_files[@]} -gt 0 ]]; then
+        mkdir -p "$output_dir/research"
+        for f in "${research_files[@]}"; do
+            cp "$f" "$output_dir/research/" 2>/dev/null
+        done
+    fi
+
+    # =========================================================================
+    # Output Summary
+    # =========================================================================
+    echo ""
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  SPEC-PREPARE COMPLETE                                        ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Journey:    ${CYAN}$journey_file${NC}"
+    echo -e "Title:      ${CYAN}$journey_title${NC}"
+    echo -e "Output:     ${CYAN}$output_dir${NC}"
+    echo -e "Spec file:  ${CYAN}$spec_output_file${NC}"
+    echo ""
+    echo -e "${BLUE}Extracted from Journey:${NC}"
+    echo -e "  Steps:        ${CYAN}$steps_count${NC}"
+    echo -e "  Personas:     ${CYAN}${#personas_found[@]}${NC}"
+    echo -e "  Pain points:  ${CYAN}${#pain_points[@]}${NC}"
+    echo -e "  Goals:        ${CYAN}${#goals[@]}${NC}"
+    echo ""
+    echo -e "${BLUE}Related Files Found:${NC}"
+    echo -e "  Persona files:  ${CYAN}${#persona_files[@]}${NC}"
+    echo -e "  Research files: ${CYAN}${#research_files[@]}${NC}"
+    echo -e "  Other journeys: ${CYAN}${#other_journeys[@]}${NC}"
+    echo ""
+    echo -e "${YELLOW}Ready for Claude Code spec generation.${NC}"
+    echo -e "Run: ${CYAN}/spec ${journey_file}${NC}"
+}
+
+# ============================================================================
+# GENERATE-PREPARE: Extract spec content for PRP generation
+# ============================================================================
+
+cmd_generate_prepare() {
+    local spec_file="$1"
+    local output_dir="$2"
+
+    [[ ! -f "$spec_file" ]] && { echo -e "${RED}Spec file not found: $spec_file${NC}"; exit 1; }
+
+    local spec_content
+    spec_content=$(cat "$spec_file")
+
+    local spec_name
+    spec_name=$(basename "$spec_file" .md)
+
+    # Default output directory
+    if [[ -z "$output_dir" ]]; then
+        output_dir="${spec_file%/*}/../PRPs/.generate-${spec_name}"
+    fi
+
+    mkdir -p "$output_dir"
+
+    # Calculate spec hash
+    local spec_hash
+    if command -v md5sum &> /dev/null; then
+        spec_hash=$(md5sum "$spec_file" | cut -c1-7)
+    else
+        spec_hash=$(md5 -q "$spec_file" | cut -c1-7)
+    fi
+
+    # Generate PRP ID
+    local today prp_id
+    today=$(date +%Y-%m-%d)
+    local prp_dir="${spec_file%/*}/../PRPs"
+    local seq_num=1
+    if [[ -d "$prp_dir" ]]; then
+        local existing_max
+        existing_max=$(grep -rh "prp_id: PRP-$today-" "$prp_dir"/*.md 2>/dev/null | \
+            grep -oE "PRP-$today-[0-9]+" | \
+            sed "s/PRP-$today-//" | \
+            sort -n | tail -1)
+        if [[ -n "$existing_max" ]]; then
+            seq_num=$((existing_max + 1))
+        fi
+    fi
+    prp_id=$(printf "PRP-%s-%03d" "$today" "$seq_num")
+
+    # =========================================================================
+    # Extract title
+    # =========================================================================
+    local title
+    title=$(echo "$spec_content" | grep -E "^# " | head -1 | sed 's/^# //')
+
+    # =========================================================================
+    # Extract Problem Statement
+    # =========================================================================
+    local problem_statement=""
+    local in_problem=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^##\ Problem\ Statement ]]; then
+            in_problem=1
+            continue
+        fi
+        if [[ $in_problem -eq 1 && "$line" =~ ^##\  ]]; then
+            in_problem=0
+        fi
+        if [[ $in_problem -eq 1 && -n "$line" && ! "$line" =~ ^--- ]]; then
+            problem_statement="${problem_statement}${line}\n"
+        fi
+    done <<< "$spec_content"
+
+    # =========================================================================
+    # Extract Scope (In/Out)
+    # =========================================================================
+    local scope_in=()
+    local scope_out=()
+    local in_scope_section=0
+    local scope_type=""
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^##\ Scope ]]; then
+            in_scope_section=1
+            continue
+        fi
+        if [[ $in_scope_section -eq 1 && "$line" =~ ^##\  ]]; then
+            in_scope_section=0
+        fi
+        if [[ $in_scope_section -eq 1 ]]; then
+            if [[ "$line" =~ ^\*\*In\ Scope ]]; then
+                scope_type="in"
+                continue
+            fi
+            if [[ "$line" =~ ^\*\*Out\ of\ Scope ]] || [[ "$line" =~ ^\*\*Out\ Scope ]]; then
+                scope_type="out"
+                continue
+            fi
+            if [[ "$line" =~ ^-\  ]]; then
+                local item="${line#- }"
+                if [[ "$scope_type" == "in" ]]; then
+                    scope_in+=("$item")
+                elif [[ "$scope_type" == "out" ]]; then
+                    scope_out+=("$item")
+                fi
+            fi
+        fi
+    done <<< "$spec_content"
+
+    # =========================================================================
+    # Extract Functional Requirements (FR-XXX sections)
+    # =========================================================================
+    local requirements=()
+    local current_fr_id=""
+    local current_fr_title=""
+    local current_fr_content=""
+    local in_fr=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^###\ (FR-[A-Z0-9]+):\ (.+) ]]; then
+            # Save previous FR if exists
+            if [[ -n "$current_fr_id" ]]; then
+                requirements+=("$current_fr_id|$current_fr_title|$current_fr_content")
+            fi
+            current_fr_id="${BASH_REMATCH[1]}"
+            current_fr_title="${BASH_REMATCH[2]}"
+            current_fr_content=""
+            in_fr=1
+            continue
+        fi
+        if [[ $in_fr -eq 1 && "$line" =~ ^###\  ]]; then
+            # Save and reset
+            if [[ -n "$current_fr_id" ]]; then
+                requirements+=("$current_fr_id|$current_fr_title|$current_fr_content")
+            fi
+            current_fr_id=""
+            current_fr_title=""
+            current_fr_content=""
+            in_fr=0
+        fi
+        if [[ $in_fr -eq 1 ]]; then
+            current_fr_content="${current_fr_content}${line}\n"
+        fi
+    done <<< "$spec_content"
+    # Don't forget last FR
+    if [[ -n "$current_fr_id" ]]; then
+        requirements+=("$current_fr_id|$current_fr_title|$current_fr_content")
+    fi
+
+    # =========================================================================
+    # Extract Code Blocks (verbatim)
+    # =========================================================================
+    local code_blocks=()
+    local in_code_block=0
+    local current_code=""
+    local code_lang=""
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\`\`\`([a-z]*) && $in_code_block -eq 0 ]]; then
+            in_code_block=1
+            code_lang="${BASH_REMATCH[1]}"
+            current_code=""
+            continue
+        fi
+        if [[ "$line" =~ ^\`\`\` && $in_code_block -eq 1 ]]; then
+            in_code_block=0
+            [[ -n "$current_code" ]] && code_blocks+=("$code_lang|$current_code")
+            continue
+        fi
+        if [[ $in_code_block -eq 1 ]]; then
+            current_code="${current_code}${line}\n"
+        fi
+    done <<< "$spec_content"
+
+    # =========================================================================
+    # Extract Tables (verbatim)
+    # =========================================================================
+    local tables=()
+    local in_table=0
+    local current_table=""
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\| && $in_table -eq 0 ]]; then
+            in_table=1
+            current_table="$line"
+            continue
+        fi
+        if [[ $in_table -eq 1 ]]; then
+            if [[ "$line" =~ ^\| ]]; then
+                current_table="${current_table}\n${line}"
+            else
+                tables+=("$current_table")
+                current_table=""
+                in_table=0
+            fi
+        fi
+    done <<< "$spec_content"
+    # Don't forget last table
+    [[ -n "$current_table" ]] && tables+=("$current_table")
+
+    # =========================================================================
+    # Extract Validation Commands section
+    # =========================================================================
+    local validation_commands=()
+    local in_validation=0
+    local in_val_code=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^##\ Validation ]] || [[ "$line" =~ ^##.*Validation\ Commands ]]; then
+            in_validation=1
+            continue
+        fi
+        if [[ $in_validation -eq 1 && "$line" =~ ^##\  && ! "$line" =~ Validation ]]; then
+            in_validation=0
+        fi
+        if [[ $in_validation -eq 1 ]]; then
+            if [[ "$line" =~ ^\`\`\`bash ]]; then
+                in_val_code=1
+                continue
+            fi
+            if [[ "$line" =~ ^\`\`\` && $in_val_code -eq 1 ]]; then
+                in_val_code=0
+                continue
+            fi
+            if [[ $in_val_code -eq 1 && -n "$line" && ! "$line" =~ ^#.*Expected ]]; then
+                validation_commands+=("$line")
+            fi
+        fi
+    done <<< "$spec_content"
+
+    # =========================================================================
+    # Extract Success Criteria
+    # =========================================================================
+    local success_criteria=()
+    local in_success=0
+    local sc_row=0
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^##\ Success\ Criteria ]] || [[ "$line" =~ ^##.*Success ]]; then
+            in_success=1
+            continue
+        fi
+        if [[ $in_success -eq 1 && "$line" =~ ^##\  ]]; then
+            in_success=0
+        fi
+        # Skip header rows
+        [[ "$line" =~ ^\|-+\| ]] && continue
+        [[ "$line" =~ ^\|.*Metric.*Target ]] && continue
+        [[ "$line" =~ ^\|.*ID.*Criterion ]] && continue
+
+        if [[ $in_success -eq 1 && "$line" =~ ^\|[^-] ]]; then
+            sc_row=$((sc_row + 1))
+            local row
+            row=$(echo "$line" | sed 's/^|//;s/|$//' | sed 's/|/\t/g')
+            local col1 col2 col3
+            col1=$(echo "$row" | cut -f1 | xargs)
+            col2=$(echo "$row" | cut -f2 | xargs)
+            col3=$(echo "$row" | cut -f3 | xargs)
+            [[ -n "$col1" ]] && success_criteria+=("SC-G.${sc_row}|$col1: $col2|$col3")
+        fi
+    done <<< "$spec_content"
+
+    # =========================================================================
+    # Calculate confidence and thinking level (reuse existing functions)
+    # =========================================================================
+    local domain_info
+    domain_info=$(resolve_domain_invariants "$spec_content")
+
+    local invariant_refs total_invariants domain_count has_skill_gap domain_name
+    invariant_refs=$(echo "$domain_info" | sed -n '/INVARIANT_REFS<<EOF/,/EOF/p' | sed '1d;$d')
+    total_invariants=$(echo "$domain_info" | grep "TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_info" | grep "DOMAIN_COUNT=" | cut -d= -f2)
+    has_skill_gap=$(echo "$domain_info" | grep "HAS_SKILL_GAP=" | cut -d= -f2)
+    domain_name=$(echo "$domain_info" | grep "DOMAIN_NAME=" | cut -d= -f2)
+
+    local confidence_info
+    confidence_info=$(analyze_spec_confidence "$spec_content")
+
+    local confidence_score clarity_score pattern_score test_score edge_score tech_score
+    confidence_score=$(echo "$confidence_info" | grep "CONFIDENCE_SCORE=" | cut -d= -f2)
+    clarity_score=$(echo "$confidence_info" | grep "CLARITY_SCORE=" | cut -d= -f2)
+    pattern_score=$(echo "$confidence_info" | grep "PATTERN_SCORE=" | cut -d= -f2)
+    test_score=$(echo "$confidence_info" | grep "TEST_SCORE=" | cut -d= -f2)
+    edge_score=$(echo "$confidence_info" | grep "EDGE_SCORE=" | cut -d= -f2)
+    tech_score=$(echo "$confidence_info" | grep "TECH_SCORE=" | cut -d= -f2)
+
+    local thinking_info
+    thinking_info=$(determine_thinking_level "$confidence_score" "$domain_count" "$total_invariants" "$has_skill_gap")
+
+    local thinking_level thinking_focus
+    thinking_level=$(echo "$thinking_info" | grep "THINKING_LEVEL=" | cut -d= -f2)
+    thinking_focus=$(echo "$thinking_info" | grep "THINKING_FOCUS=" | cut -d= -f2)
+
+    # Determine risk level
+    local risk_level
+    if (( $(echo "$confidence_score < 5" | bc -l) )); then
+        risk_level="Low/Red"
+    elif (( $(echo "$confidence_score < 7" | bc -l) )); then
+        risk_level="Medium/Yellow"
+    else
+        risk_level="High/Green"
+    fi
+
+    # =========================================================================
+    # Check for related files (journeys, personas, research)
+    # =========================================================================
+    local spec_dir="${spec_file%/*}"
+    local design_dir="${spec_dir}/.."
+    local journeys=()
+    local personas=()
+    local research=()
+
+    if [[ -d "$design_dir/journeys" ]]; then
+        while IFS= read -r -d '' f; do
+            journeys+=("$f")
+        done < <(find "$design_dir/journeys" -name "*.md" -print0 2>/dev/null)
+    fi
+    if [[ -d "$design_dir/personas" ]]; then
+        while IFS= read -r -d '' f; do
+            personas+=("$f")
+        done < <(find "$design_dir/personas" -name "*.md" -print0 2>/dev/null)
+    fi
+    if [[ -d "$design_dir/research" ]]; then
+        while IFS= read -r -d '' f; do
+            research+=("$f")
+        done < <(find "$design_dir/research" -name "*.md" -print0 2>/dev/null)
+    fi
+
+    # =========================================================================
+    # Generate manifest JSON
+    # =========================================================================
+    local manifest_file="$output_dir/.manifest.json"
+    local output_prp_file="${spec_file%/*}/../PRPs/${spec_name}-prp.md"
+
+    # Helper to escape JSON strings
+    json_escape() {
+        echo "$1" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed 's/\t/\\t/g' | tr '\n' ' ' | sed 's/\\n */\\n/g'
+    }
+
+    echo "{" > "$manifest_file"
+    echo "  \"prp_id\": \"$prp_id\"," >> "$manifest_file"
+    echo "  \"spec_file\": \"$(realpath "$spec_file")\"," >> "$manifest_file"
+    echo "  \"spec_hash\": \"$spec_hash\"," >> "$manifest_file"
+    echo "  \"output_file\": \"$(realpath "$output_prp_file" 2>/dev/null || echo "$output_prp_file")\"," >> "$manifest_file"
+    echo "  \"template_file\": \"$TEMPLATES_DIR/prp-base.md\"," >> "$manifest_file"
+    echo "  \"generated_date\": \"$(date +%Y-%m-%d)\"," >> "$manifest_file"
+
+    # Extracted content
+    echo "  \"extracted\": {" >> "$manifest_file"
+    echo "    \"title\": \"$(json_escape "$title")\"," >> "$manifest_file"
+    echo "    \"problem_statement\": \"$(json_escape "$problem_statement")\"," >> "$manifest_file"
+
+    # Scope arrays
+    echo "    \"scope_in\": [" >> "$manifest_file"
+    for i in "${!scope_in[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#scope_in[@]} - 1)) ]] && comma=""
+        echo "      \"$(json_escape "${scope_in[$i]}")\"${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+
+    echo "    \"scope_out\": [" >> "$manifest_file"
+    for i in "${!scope_out[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#scope_out[@]} - 1)) ]] && comma=""
+        echo "      \"$(json_escape "${scope_out[$i]}")\"${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+
+    # Requirements
+    echo "    \"functional_requirements\": [" >> "$manifest_file"
+    for i in "${!requirements[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#requirements[@]} - 1)) ]] && comma=""
+        IFS='|' read -r fr_id fr_title fr_content <<< "${requirements[$i]}"
+        echo "      {" >> "$manifest_file"
+        echo "        \"id\": \"$fr_id\"," >> "$manifest_file"
+        echo "        \"title\": \"$(json_escape "$fr_title")\"," >> "$manifest_file"
+        echo "        \"content\": \"$(json_escape "$fr_content")\"" >> "$manifest_file"
+        echo "      }${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+
+    # Success criteria
+    echo "    \"success_criteria\": [" >> "$manifest_file"
+    for i in "${!success_criteria[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#success_criteria[@]} - 1)) ]] && comma=""
+        IFS='|' read -r sc_id sc_crit sc_metric <<< "${success_criteria[$i]}"
+        echo "      { \"id\": \"$sc_id\", \"criterion\": \"$(json_escape "$sc_crit")\", \"metric\": \"$(json_escape "$sc_metric")\" }${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+
+    # Validation commands
+    echo "    \"validation_commands\": [" >> "$manifest_file"
+    for i in "${!validation_commands[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#validation_commands[@]} - 1)) ]] && comma=""
+        echo "      \"$(json_escape "${validation_commands[$i]}")\"${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+
+    # Code blocks count and tables count (content saved to files)
+    echo "    \"code_blocks_count\": ${#code_blocks[@]}," >> "$manifest_file"
+    echo "    \"tables_count\": ${#tables[@]}" >> "$manifest_file"
+    echo "  }," >> "$manifest_file"
+
+    # Calculated values
+    echo "  \"calculated\": {" >> "$manifest_file"
+    echo "    \"confidence_score\": $confidence_score," >> "$manifest_file"
+    echo "    \"confidence_breakdown\": {" >> "$manifest_file"
+    echo "      \"clarity\": $clarity_score," >> "$manifest_file"
+    echo "      \"patterns\": $pattern_score," >> "$manifest_file"
+    echo "      \"tests\": $test_score," >> "$manifest_file"
+    echo "      \"edges\": $edge_score," >> "$manifest_file"
+    echo "      \"tech\": $tech_score" >> "$manifest_file"
+    echo "    }," >> "$manifest_file"
+    echo "    \"risk_level\": \"$risk_level\"," >> "$manifest_file"
+    echo "    \"thinking_level\": \"$thinking_level\"," >> "$manifest_file"
+    echo "    \"thinking_focus\": \"$(echo "$thinking_focus" | tr '|' ', ')\"," >> "$manifest_file"
+    echo "    \"domain\": \"${domain_name:-universal}\"," >> "$manifest_file"
+    echo "    \"domain_count\": $domain_count," >> "$manifest_file"
+    echo "    \"invariant_count\": $total_invariants" >> "$manifest_file"
+    echo "  }," >> "$manifest_file"
+
+    # Related files
+    echo "  \"related_files\": {" >> "$manifest_file"
+    echo "    \"journeys\": [" >> "$manifest_file"
+    for i in "${!journeys[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#journeys[@]} - 1)) ]] && comma=""
+        echo "      \"${journeys[$i]}\"${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+    echo "    \"personas\": [" >> "$manifest_file"
+    for i in "${!personas[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#personas[@]} - 1)) ]] && comma=""
+        echo "      \"${personas[$i]}\"${comma}" >> "$manifest_file"
+    done
+    echo "    ]," >> "$manifest_file"
+    echo "    \"research\": [" >> "$manifest_file"
+    for i in "${!research[@]}"; do
+        local comma=","
+        [[ $i -eq $((${#research[@]} - 1)) ]] && comma=""
+        echo "      \"${research[$i]}\"${comma}" >> "$manifest_file"
+    done
+    echo "    ]" >> "$manifest_file"
+    echo "  }" >> "$manifest_file"
+
+    echo "}" >> "$manifest_file"
+
+    # Save code blocks to separate files (for verbatim preservation)
+    local blocks_dir="$output_dir/code_blocks"
+    mkdir -p "$blocks_dir"
+    for i in "${!code_blocks[@]}"; do
+        IFS='|' read -r lang content <<< "${code_blocks[$i]}"
+        echo -e "$content" > "$blocks_dir/block-$((i+1)).$lang"
+    done
+
+    # Save tables to separate file
+    echo "" > "$output_dir/tables.md"
+    for i in "${!tables[@]}"; do
+        echo -e "### Table $((i+1))\n" >> "$output_dir/tables.md"
+        echo -e "${tables[$i]}\n" >> "$output_dir/tables.md"
+    done
+
+    # Output summary
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  GENERATE-PREPARE COMPLETE                                    ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Spec:       ${CYAN}${spec_file}${NC}"
+    echo -e "Output:     ${CYAN}${output_dir}${NC}"
+    echo -e "Manifest:   ${CYAN}${output_dir}/.manifest.json${NC}"
+    echo ""
+    echo -e "${BLUE}Extracted:${NC}"
+    echo -e "  Title:        ${CYAN}${title}${NC}"
+    echo -e "  Problem:      ${CYAN}$(echo -e "$problem_statement" | head -1 | cut -c1-50)...${NC}"
+    echo -e "  Scope In:     ${CYAN}${#scope_in[@]} items${NC}"
+    echo -e "  Scope Out:    ${CYAN}${#scope_out[@]} items${NC}"
+    echo -e "  Requirements: ${CYAN}${#requirements[@]} FRs${NC}"
+    echo -e "  Criteria:     ${CYAN}${#success_criteria[@]} success criteria${NC}"
+    echo -e "  Commands:     ${CYAN}${#validation_commands[@]} validation commands${NC}"
+    echo -e "  Code blocks:  ${CYAN}${#code_blocks[@]} (saved to code_blocks/)${NC}"
+    echo -e "  Tables:       ${CYAN}${#tables[@]} (saved to tables.md)${NC}"
+    echo ""
+    echo -e "${BLUE}Calculated:${NC}"
+    echo -e "  PRP ID:       ${CYAN}${prp_id}${NC}"
+    echo -e "  Confidence:   ${CYAN}${confidence_score}/10 (${risk_level})${NC}"
+    echo -e "  Thinking:     ${CYAN}${thinking_level}${NC}"
+    echo -e "  Domain:       ${CYAN}${domain_name:-universal} (${domain_count} domains, ${total_invariants} invariants)${NC}"
+    echo ""
+    if [[ ${#journeys[@]} -gt 0 ]] || [[ ${#personas[@]} -gt 0 ]] || [[ ${#research[@]} -gt 0 ]]; then
+        echo -e "${BLUE}Related files found:${NC}"
+        [[ ${#journeys[@]} -gt 0 ]] && echo -e "  Journeys:     ${CYAN}${#journeys[@]}${NC}"
+        [[ ${#personas[@]} -gt 0 ]] && echo -e "  Personas:     ${CYAN}${#personas[@]}${NC}"
+        [[ ${#research[@]} -gt 0 ]] && echo -e "  Research:     ${CYAN}${#research[@]}${NC}"
+        echo ""
+    fi
+    echo -e "${YELLOW}Ready for Claude Code PRP generation.${NC}"
+    echo -e "Run: ${CYAN}/generate ${spec_file}${NC}"
+}
+
+# ============================================================================
+# VALIDATE-PREPARE: Extract spec content and run deterministic checks
+# Output: manifest.json with spec sections, deterministic results, domain info
+# Claude Code uses this to do LLM analysis directly (no nested CLI)
+# ============================================================================
+cmd_validate_prepare() {
+    local spec_file="$1"
+    local output_dir="$2"
+
+    [[ ! -f "$spec_file" ]] && { echo -e "${RED}File not found: $spec_file${NC}"; exit 1; }
+
+    # Resolve absolute path
+    spec_file=$(cd "$(dirname "$spec_file")" && pwd)/$(basename "$spec_file")
+
+    local spec_name
+    spec_name=$(basename "$spec_file" .md)
+
+    # Default output directory
+    if [[ -z "$output_dir" ]]; then
+        output_dir="${spec_file%/*}/.validate-${spec_name}"
+    fi
+
+    mkdir -p "$output_dir"
+
+    local spec_content
+    spec_content=$(cat "$spec_file")
+
+    # =========================================================================
+    # Run deterministic checks (same as check_spec_structure)
+    # =========================================================================
+    local issues=()
+    local warnings=()
+
+    # Required sections
+    if ! echo "$spec_content" | grep -qiE "^#.*problem|^##.*problem|problem.*statement"; then
+        issues+=("Missing: Problem statement")
+    fi
+
+    if ! echo "$spec_content" | grep -qiE "success.*criter|acceptance.*criter|done.*when|definition.*done"; then
+        issues+=("Missing: Success criteria")
+    fi
+
+    if ! echo "$spec_content" | grep -qiE "scope|boundar|in.scope|out.of.scope|non-goal"; then
+        warnings+=("Consider adding: Scope boundaries")
+    fi
+
+    if ! echo "$spec_content" | grep -qiE "test|verif|validat"; then
+        warnings+=("Consider adding: Test/validation approach")
+    fi
+
+    # Check for vague words
+    local vague_count
+    vague_count=$(echo "$spec_content" | grep -ciE "properly|efficiently|adequate|reasonable|good quality|as needed" 2>/dev/null) || vague_count=0
+    if [[ $vague_count -gt 3 ]]; then
+        warnings+=("Found $vague_count vague terms (properly, efficiently, etc.)")
+    fi
+
+    # Check minimum content
+    local word_count
+    word_count=$(wc -w < "$spec_file" | tr -d ' ')
+    if [[ $word_count -lt 100 ]]; then
+        issues+=("Too short: $word_count words (minimum ~100)")
+    fi
+
+    # Determine grade
+    local deterministic_grade="PASS"
+    if [[ ${#issues[@]} -gt 0 ]]; then
+        deterministic_grade="FAIL"
+    elif [[ ${#warnings[@]} -gt 2 ]]; then
+        deterministic_grade="NEEDS_WORK"
+    fi
+
+    # =========================================================================
+    # Detect domains and invariants
+    # =========================================================================
+    local domain_info
+    domain_info=$(resolve_domain_invariants "$spec_content")
+
+    local invariant_refs total_invariants domain_count domain_name
+    invariant_refs=$(echo "$domain_info" | sed -n '/INVARIANT_REFS<<EOF/,/EOF/p' | sed '1d;$d')
+    total_invariants=$(echo "$domain_info" | grep "TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_info" | grep "DOMAIN_COUNT=" | cut -d= -f2)
+    domain_name=$(echo "$domain_info" | grep "DOMAIN_NAME=" | cut -d= -f2)
+
+    # =========================================================================
+    # Extract key sections for LLM analysis
+    # =========================================================================
+    # Extract problem statement
+    local problem_statement=""
+    local in_problem=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^##.*[Pp]roblem ]] || [[ "$line" =~ ^#.*[Pp]roblem ]]; then
+            in_problem=1
+            continue
+        fi
+        if [[ $in_problem -eq 1 && "$line" =~ ^## ]]; then
+            break
+        fi
+        [[ $in_problem -eq 1 ]] && problem_statement+="$line"$'\n'
+    done <<< "$spec_content"
+
+    # Extract all tables (for context)
+    local tables=""
+    local in_table=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\|.*\| ]]; then
+            in_table=1
+            tables+="$line"$'\n'
+        elif [[ $in_table -eq 1 && ! "$line" =~ ^\|.*\| ]]; then
+            in_table=0
+            tables+=$'\n'
+        fi
+    done <<< "$spec_content"
+
+    # Extract code blocks (for context)
+    local code_blocks=""
+    local in_code=0
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\`\`\` ]]; then
+            if [[ $in_code -eq 0 ]]; then
+                in_code=1
+            else
+                in_code=0
+                code_blocks+="$line"$'\n\n'
+            fi
+        fi
+        [[ $in_code -eq 1 ]] && code_blocks+="$line"$'\n'
+    done <<< "$spec_content"
+
+    # Find vague terms with line numbers
+    local vague_terms=()
+    local line_num=0
+    while IFS= read -r line; do
+        line_num=$((line_num + 1))
+        if echo "$line" | grep -qiE "properly|efficiently|adequate|reasonable|good quality|as needed|intuitive|user-friendly|as appropriate"; then
+            local match
+            match=$(echo "$line" | grep -oiE "(properly|efficiently|adequate|reasonable|good quality|as needed|intuitive|user-friendly|as appropriate)[^.]*" | head -1)
+            [[ -n "$match" ]] && vague_terms+=("Line $line_num: \"...$match...\"")
+        fi
+    done <<< "$spec_content"
+
+    # =========================================================================
+    # Generate manifest JSON
+    # =========================================================================
+    local manifest_file="$output_dir/.manifest.json"
+    local spec_hash
+    spec_hash=$(echo "$spec_content" | shasum | cut -c1-7)
+
+    # Helper to escape JSON strings
+    json_escape() {
+        local s="$1"
+        s="${s//\\/\\\\}"
+        s="${s//\"/\\\"}"
+        s="${s//$'\n'/\\n}"
+        s="${s//$'\t'/\\t}"
+        s="${s//$'\r'/}"
+        echo "$s"
+    }
+
+    # Build issues array
+    local issues_json="["
+    local first=1
+    for issue in "${issues[@]}"; do
+        [[ $first -eq 0 ]] && issues_json+=","
+        issues_json+="\"$(json_escape "$issue")\""
+        first=0
+    done
+    issues_json+="]"
+
+    # Build warnings array
+    local warnings_json="["
+    first=1
+    for warning in "${warnings[@]}"; do
+        [[ $first -eq 0 ]] && warnings_json+=","
+        warnings_json+="\"$(json_escape "$warning")\""
+        first=0
+    done
+    warnings_json+="]"
+
+    # Build vague_terms array
+    local vague_json="["
+    first=1
+    for term in "${vague_terms[@]}"; do
+        [[ $first -eq 0 ]] && vague_json+=","
+        vague_json+="\"$(json_escape "$term")\""
+        first=0
+    done
+    vague_json+="]"
+
+    # Write manifest
+    cat > "$manifest_file" << EOF
+{
+  "spec_file": "$spec_file",
+  "spec_hash": "$spec_hash",
+  "output_dir": "$output_dir",
+  "validated_date": "$(date +%Y-%m-%d)",
+  "deterministic_checks": {
+    "grade": "$deterministic_grade",
+    "issues": $issues_json,
+    "warnings": $warnings_json,
+    "word_count": $word_count,
+    "vague_term_count": $vague_count,
+    "vague_terms": $vague_json
+  },
+  "domain_info": {
+    "domain_name": "${domain_name:-universal}",
+    "domain_count": ${domain_count:-0},
+    "total_invariants": ${total_invariants:-11}
+  },
+  "llm_analysis_prompt": {
+    "context": "spec_validation",
+    "invariant_focus": "Invariant #1 (Ambiguity): Every term must have operational definition",
+    "check_for": [
+      "Vague terms without measurable definitions",
+      "Implicit assumptions not stated explicitly",
+      "Ambiguous state transitions",
+      "Success criteria that cannot be objectively measured",
+      "Missing edge case definitions"
+    ],
+    "output_schema": {
+      "summary": "One sentence on clarity level",
+      "ambiguity_flags": "Specific vague terms found (quote text, max 5)",
+      "implicit_assumptions": "Things spec assumes but does not state (max 3)",
+      "suggestions": "How to make unclear sections more specific (max 5)",
+      "strengths": "What is already clear and well-defined (max 2)"
+    }
+  }
+}
+EOF
+
+    # Also save the full spec content for Claude Code to analyze
+    cp "$spec_file" "$output_dir/spec-content.md"
+
+    # =========================================================================
+    # Output summary
+    # =========================================================================
+    echo ""
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  VALIDATE-PREPARE COMPLETE                                    ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Spec:       ${CYAN}$spec_file${NC}"
+    echo -e "Output:     ${CYAN}$output_dir${NC}"
+    echo -e "Manifest:   ${CYAN}$manifest_file${NC}"
+    echo ""
+    echo -e "${BLUE}Deterministic Checks:${NC}"
+    echo -e "  Grade:      ${CYAN}$deterministic_grade${NC}"
+    echo -e "  Issues:     ${CYAN}${#issues[@]}${NC}"
+    echo -e "  Warnings:   ${CYAN}${#warnings[@]}${NC}"
+    echo -e "  Word count: ${CYAN}$word_count${NC}"
+    echo -e "  Vague terms: ${CYAN}$vague_count${NC}"
+    echo ""
+    echo -e "${BLUE}Domain Info:${NC}"
+    echo -e "  Domain:     ${CYAN}${domain_name:-universal}${NC}"
+    echo -e "  Invariants: ${CYAN}${total_invariants:-11}${NC}"
+    echo ""
+    echo -e "${YELLOW}Ready for Claude Code LLM analysis.${NC}"
+    echo -e "Run: ${CYAN}/validate ${spec_file}${NC}"
+}
+
+# ============================================================================
+# STRESS-TEST-PREPARE: Run coverage checks and extract data for LLM analysis
+# Output: manifest.json with coverage results, domain info, invariant refs
+# Claude Code uses this to do deep analysis directly (no nested CLI)
+# ============================================================================
+cmd_stress_test_prepare() {
+    local spec_file="$1"
+    local requirements_file="$2"
+    local journeys_file="$3"
+    local output_dir="$4"
+
+    [[ ! -f "$spec_file" ]] && { echo -e "${RED}File not found: $spec_file${NC}"; exit 1; }
+
+    # Resolve absolute path
+    spec_file=$(cd "$(dirname "$spec_file")" && pwd)/$(basename "$spec_file")
+
+    local spec_name
+    spec_name=$(basename "$spec_file" .md)
+
+    # Default output directory
+    if [[ -z "$output_dir" ]]; then
+        output_dir="${spec_file%/*}/.stress-test-${spec_name}"
+    fi
+
+    mkdir -p "$output_dir"
+
+    local spec_content
+    spec_content=$(cat "$spec_file")
+
+    # =========================================================================
+    # Domain Detection
+    # =========================================================================
+    local domain_result
+    domain_result=$(resolve_domain_invariants "$spec_content")
+
+    local invariant_refs total_invariants domain_count domain_name
+    invariant_refs=$(echo "$domain_result" | sed -n '/^INVARIANT_REFS<<EOF$/,/^EOF$/p' | sed '1d;$d')
+    total_invariants=$(echo "$domain_result" | grep "^TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_result" | grep "^DOMAIN_COUNT=" | cut -d= -f2)
+    domain_name=$(echo "$domain_result" | grep "^DOMAIN_NAME=" | cut -d= -f2)
+
+    # =========================================================================
+    # Deterministic Coverage Checks
+    # =========================================================================
+    local coverage_checks=()
+    local issues=()
+    local warnings=()
+
+    # Happy path
+    if echo "$spec_content" | grep -qiE "happy path|success.*path|normal.*flow"; then
+        coverage_checks+=('{"check": "happy_path", "passed": true, "label": "Happy path mentioned"}')
+    else
+        coverage_checks+=('{"check": "happy_path", "passed": false, "label": "Happy path not explicitly described"}')
+        warnings+=("Happy path not explicitly described")
+    fi
+
+    # Error cases
+    if echo "$spec_content" | grep -qiE "error|fail|exception|invalid|edge.case"; then
+        coverage_checks+=('{"check": "error_cases", "passed": true, "label": "Error cases mentioned"}')
+    else
+        coverage_checks+=('{"check": "error_cases", "passed": false, "label": "Error/failure cases not addressed"}')
+        issues+=("Error/failure cases not addressed")
+    fi
+
+    # Empty/null states
+    if echo "$spec_content" | grep -qiE "empty|null|zero|no.*data|missing"; then
+        coverage_checks+=('{"check": "empty_states", "passed": true, "label": "Empty/null states mentioned"}')
+    else
+        coverage_checks+=('{"check": "empty_states", "passed": false, "label": "Empty/null states not explicitly handled"}')
+        warnings+=("Empty/null states not explicitly handled")
+    fi
+
+    # External failure modes
+    if echo "$spec_content" | grep -qiE "timeout|offline|unavailable|network|api.*fail"; then
+        coverage_checks+=('{"check": "failure_modes", "passed": true, "label": "Failure modes mentioned (timeout, offline, etc.)"}')
+    else
+        coverage_checks+=('{"check": "failure_modes", "passed": false, "label": "External failure modes not addressed"}')
+        issues+=("External failure modes not addressed (API down, timeout, offline)")
+    fi
+
+    # Concurrency
+    if echo "$spec_content" | grep -qiE "concurrent|race|simultaneous|parallel"; then
+        coverage_checks+=('{"check": "concurrency", "passed": true, "label": "Concurrency considerations mentioned"}')
+    else
+        coverage_checks+=('{"check": "concurrency", "passed": false, "label": "Concurrency not explicitly addressed (may not apply)"}')
+        warnings+=("Concurrency not explicitly addressed (may not apply)")
+    fi
+
+    # Limits/boundaries
+    if echo "$spec_content" | grep -qiE "limit|max|min|bound|threshold|quota"; then
+        coverage_checks+=('{"check": "limits", "passed": true, "label": "Limits/boundaries mentioned"}')
+    else
+        coverage_checks+=('{"check": "limits", "passed": false, "label": "Limits/boundaries not specified"}')
+        warnings+=("Limits/boundaries not specified")
+    fi
+
+    # Calculate coverage
+    local passed_count=0
+    local total_count=${#coverage_checks[@]}
+    for check in "${coverage_checks[@]}"; do
+        if echo "$check" | grep -q '"passed": true'; then
+            ((passed_count++))
+        fi
+    done
+    local coverage_pct=$((passed_count * 100 / total_count))
+
+    # Determine status
+    local status
+    if [[ ${#issues[@]} -ge 2 ]]; then
+        status="REVIEW_REQUIRED"
+    elif [[ ${#issues[@]} -ge 1 ]] || [[ ${#warnings[@]} -ge 3 ]]; then
+        status="ITEMS_TO_REVIEW"
+    else
+        status="NO_OBVIOUS_GAPS"
+    fi
+
+    # =========================================================================
+    # Handle additional files
+    # =========================================================================
+    local has_requirements="false"
+    local has_journeys="false"
+
+    if [[ -n "$requirements_file" ]] && [[ -f "$requirements_file" ]]; then
+        cp "$requirements_file" "$output_dir/requirements.md"
+        has_requirements="true"
+    fi
+
+    if [[ -n "$journeys_file" ]] && [[ -f "$journeys_file" ]]; then
+        cp "$journeys_file" "$output_dir/journeys.md"
+        has_journeys="true"
+    fi
+
+    # =========================================================================
+    # Generate manifest
+    # =========================================================================
+    local spec_hash
+    spec_hash=$(git hash-object "$spec_file" 2>/dev/null | head -c 7 || md5 -q "$spec_file" 2>/dev/null | head -c 7 || echo "unknown")
+
+    local manifest_file="$output_dir/.manifest.json"
+
+    # Build coverage checks JSON array
+    local checks_json="["
+    local first=true
+    for check in "${coverage_checks[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            checks_json+="$check"
+            first=false
+        else
+            checks_json+=",$check"
+        fi
+    done
+    checks_json+="]"
+
+    # Build issues JSON array
+    local issues_json="["
+    first=true
+    for issue in "${issues[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            issues_json+="\"$issue\""
+            first=false
+        else
+            issues_json+=",\"$issue\""
+        fi
+    done
+    issues_json+="]"
+
+    # Build warnings JSON array
+    local warnings_json="["
+    first=true
+    for warning in "${warnings[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            warnings_json+="\"$warning\""
+            first=false
+        else
+            warnings_json+=",\"$warning\""
+        fi
+    done
+    warnings_json+="]"
+
+    # Escape invariant refs for JSON (newlines to \n) - macOS compatible
+    local invariant_refs_escaped
+    invariant_refs_escaped=$(echo "$invariant_refs" | tr '\n' ' ' | sed 's/  */ /g')
+
+    cat > "$manifest_file" << EOF
+{
+  "spec_file": "$spec_file",
+  "spec_hash": "$spec_hash",
+  "output_dir": "$output_dir",
+  "stress_test_date": "$(date +%Y-%m-%d)",
+  "coverage_checks": {
+    "checks": $checks_json,
+    "passed": $passed_count,
+    "total": $total_count,
+    "percentage": $coverage_pct,
+    "issues": $issues_json,
+    "warnings": $warnings_json,
+    "status": "$status"
+  },
+  "domain_info": {
+    "domain_name": "${domain_name:-universal}",
+    "domain_count": ${domain_count:-0},
+    "total_invariants": ${total_invariants:-11},
+    "invariant_refs": "$invariant_refs_escaped"
+  },
+  "additional_files": {
+    "has_requirements": $has_requirements,
+    "has_journeys": $has_journeys
+  },
+  "llm_analysis_prompt": {
+    "context": "spec_stress_test",
+    "focus": "Completeness and invariant coverage",
+    "key_invariants": [
+      "Invariant #1 (Ambiguity): Every term must have operational definition",
+      "Invariant #4 (No Irreversible Without Recovery): Destructive actions need undo/confirmation",
+      "Invariant #5 (Fail Loudly): Errors must be visible, not silent",
+      "Invariant #7 (Validation Executable): Success criteria must be testable",
+      "Invariant #10 (Degradation Path): What happens when dependencies fail?"
+    ],
+    "output_schema": {
+      "summary": "One sentence on overall completeness",
+      "invariant_violations": "Specific invariants violated (reference by number, max 5)",
+      "missing_failure_modes": "Failure scenarios not addressed (max 5)",
+      "missing_coverage": "User journey steps or requirements not covered (max 5)",
+      "critical_blockers": "Questions that MUST be answered before proceeding (max 5)"
+    }
+  }
+}
+EOF
+
+    # Save spec content for Claude Code to analyze
+    cp "$spec_file" "$output_dir/spec-content.md"
+
+    # =========================================================================
+    # Output summary
+    # =========================================================================
+    echo ""
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  STRESS-TEST-PREPARE COMPLETE                                 ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Spec:       ${CYAN}$spec_file${NC}"
+    echo -e "Output:     ${CYAN}$output_dir${NC}"
+    echo -e "Manifest:   ${CYAN}$manifest_file${NC}"
+    echo ""
+    echo -e "${BLUE}Coverage Checks:${NC}"
+    echo -e "  Passed:   ${CYAN}$passed_count/$total_count ($coverage_pct%)${NC}"
+    echo -e "  Issues:   ${CYAN}${#issues[@]}${NC}"
+    echo -e "  Warnings: ${CYAN}${#warnings[@]}${NC}"
+    echo -e "  Status:   ${CYAN}$status${NC}"
+    echo ""
+    echo -e "${BLUE}Domain Info:${NC}"
+    echo -e "  Domain:     ${CYAN}${domain_name:-universal}${NC}"
+    echo -e "  Invariants: ${CYAN}${total_invariants:-11}${NC}"
+    echo ""
+    [[ "$has_requirements" == "true" ]] && echo -e "  ${GREEN}+${NC} Requirements file included"
+    [[ "$has_journeys" == "true" ]] && echo -e "  ${GREEN}+${NC} User journeys file included"
+    echo ""
+    echo -e "${YELLOW}Ready for Claude Code LLM analysis.${NC}"
+    echo -e "Run: ${CYAN}/stress-test ${spec_file}${NC}"
+}
+
+# ============================================================================
+# CHECK-PREPARE: Run PRP quality checks and extract data for LLM analysis
+# Output: manifest.json with structural results, source spec comparison
+# Claude Code uses this to do LLM assessment directly (no nested CLI)
+# ============================================================================
+cmd_check_prepare() {
+    local prp_file="$1"
+    local output_dir="$2"
+
+    [[ ! -f "$prp_file" ]] && { echo -e "${RED}File not found: $prp_file${NC}"; exit 1; }
+
+    # Resolve absolute path
+    prp_file=$(cd "$(dirname "$prp_file")" && pwd)/$(basename "$prp_file")
+
+    local prp_name
+    prp_name=$(basename "$prp_file" .md)
+
+    # Default output directory
+    if [[ -z "$output_dir" ]]; then
+        output_dir="${prp_file%/*}/.check-${prp_name}"
+    fi
+
+    mkdir -p "$output_dir"
+
+    local prp_content
+    prp_content=$(cat "$prp_file")
+
+    # =========================================================================
+    # Domain Detection
+    # =========================================================================
+    local domain_result
+    domain_result=$(resolve_domain_invariants "$prp_content")
+
+    local total_invariants domain_count domain_name
+    total_invariants=$(echo "$domain_result" | grep "^TOTAL_INVARIANTS=" | cut -d= -f2)
+    domain_count=$(echo "$domain_result" | grep "^DOMAIN_COUNT=" | cut -d= -f2)
+    domain_name=$(echo "$domain_result" | grep "^DOMAIN_NAME=" | cut -d= -f2)
+
+    # =========================================================================
+    # Source Spec Detection
+    # =========================================================================
+    local source_spec=""
+    local source_spec_content=""
+    local has_source_spec="false"
+
+    # Try to extract source_spec from PRP meta block
+    source_spec=$(echo "$prp_content" | grep -E "^source_spec:" | head -1 | sed 's/source_spec://' | xargs)
+
+    if [[ -z "$source_spec" ]]; then
+        # Try alternative format: Source Spec Reference in appendix
+        source_spec=$(echo "$prp_content" | grep -E "Spec Path:" | head -1 | sed 's/.*Spec Path://' | xargs)
+    fi
+
+    if [[ -n "$source_spec" && -f "$source_spec" ]]; then
+        source_spec_content=$(cat "$source_spec")
+        has_source_spec="true"
+        cp "$source_spec" "$output_dir/source-spec.md"
+    fi
+
+    # =========================================================================
+    # Structural Checks (same as check_prp_structure)
+    # =========================================================================
+    local issues=()
+    local warnings=()
+    local checks=()
+
+    # Required PRP sections
+    local required_sections=("overview" "success criteria" "timeline" "risk" "validation")
+
+    for section in "${required_sections[@]}"; do
+        if echo "$prp_content" | grep -qiE "^#+.*$section"; then
+            checks+=("{\"check\": \"section_${section// /_}\", \"passed\": true, \"label\": \"$section section found\"}")
+        else
+            checks+=("{\"check\": \"section_${section// /_}\", \"passed\": false, \"label\": \"Missing section: $section\"}")
+            issues+=("Missing section: $section")
+        fi
+    done
+
+    # Check for unfilled placeholders
+    local placeholder_count
+    placeholder_count=$(grep -cE '\[FILL|\[TODO|\[TBD|\{\{' "$prp_file" 2>/dev/null) || placeholder_count=0
+    if [[ $placeholder_count -gt 0 ]]; then
+        checks+=("{\"check\": \"placeholders\", \"passed\": false, \"label\": \"Found $placeholder_count unfilled placeholders\"}")
+        issues+=("Found $placeholder_count unfilled placeholders")
+    else
+        checks+=("{\"check\": \"placeholders\", \"passed\": true, \"label\": \"No unfilled placeholders\"}")
+    fi
+
+    # Check for LLM reasoning that shouldn't be in output
+    if head -30 "$prp_file" | grep -qiE "let me|I'll|I will|here's my|thinking"; then
+        checks+=("{\"check\": \"llm_reasoning\", \"passed\": false, \"label\": \"PRP may contain LLM reasoning\"}")
+        warnings+=("PRP may contain LLM reasoning that should be removed")
+    else
+        checks+=("{\"check\": \"llm_reasoning\", \"passed\": true, \"label\": \"No LLM reasoning artifacts\"}")
+    fi
+
+    # =========================================================================
+    # Source Spec Comparison (if available)
+    # =========================================================================
+    local comparison_checks=()
+    local comparison_preserved=0
+    local comparison_missing=0
+
+    if [[ "$has_source_spec" == "true" ]]; then
+        # Check for SQL/schema preservation
+        if echo "$source_spec_content" | grep -qiE "CREATE TABLE|ALTER TABLE|SQL"; then
+            if echo "$prp_content" | grep -qiE "CREATE TABLE|ALTER TABLE|Database Schema"; then
+                comparison_checks+=("{\"check\": \"database_schema\", \"preserved\": true, \"label\": \"Database schema content preserved\"}")
+                ((comparison_preserved++))
+            else
+                comparison_checks+=("{\"check\": \"database_schema\", \"preserved\": false, \"label\": \"Source has SQL/schema but PRP may be missing it\"}")
+                ((comparison_missing++))
+            fi
+        fi
+
+        # Check for API endpoint preservation
+        if echo "$source_spec_content" | grep -qiE "GET /|POST /|PUT /|DELETE /|/api/"; then
+            if echo "$prp_content" | grep -qiE "GET /|POST /|PUT /|DELETE /|/api/|API Spec"; then
+                comparison_checks+=("{\"check\": \"api_endpoints\", \"preserved\": true, \"label\": \"API endpoints preserved\"}")
+                ((comparison_preserved++))
+            else
+                comparison_checks+=("{\"check\": \"api_endpoints\", \"preserved\": false, \"label\": \"Source has API endpoints but PRP may be missing them\"}")
+                ((comparison_missing++))
+            fi
+        fi
+
+        # Check for wireframe/ASCII art preservation
+        if echo "$source_spec_content" | grep -qE "┌|└|├|│|─"; then
+            if echo "$prp_content" | grep -qE "┌|└|├|│|─"; then
+                comparison_checks+=("{\"check\": \"ascii_wireframes\", \"preserved\": true, \"label\": \"ASCII wireframes preserved\"}")
+                ((comparison_preserved++))
+            else
+                comparison_checks+=("{\"check\": \"ascii_wireframes\", \"preserved\": false, \"label\": \"Source has ASCII wireframes but PRP may be missing them\"}")
+                ((comparison_missing++))
+            fi
+        fi
+
+        # Check for error messages preservation
+        if echo "$source_spec_content" | grep -qiE "error message|Error:|\".*not found\""; then
+            if echo "$prp_content" | grep -qiE "error message|Error Catalog|\".*not found\""; then
+                comparison_checks+=("{\"check\": \"error_messages\", \"preserved\": true, \"label\": \"Error messages preserved\"}")
+                ((comparison_preserved++))
+            else
+                comparison_checks+=("{\"check\": \"error_messages\", \"preserved\": false, \"label\": \"Source has error messages - verify PRP includes them\"}")
+                ((comparison_missing++))
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Determine Grade
+    # =========================================================================
+    local structural_grade
+    if [[ ${#issues[@]} -gt 0 ]]; then
+        structural_grade="FAIL"
+    elif [[ ${#warnings[@]} -gt 0 ]]; then
+        structural_grade="NEEDS_WORK"
+    else
+        structural_grade="PASS"
+    fi
+
+    # =========================================================================
+    # Generate Manifest
+    # =========================================================================
+    local prp_hash
+    prp_hash=$(git hash-object "$prp_file" 2>/dev/null | head -c 7 || md5 -q "$prp_file" 2>/dev/null | head -c 7 || echo "unknown")
+
+    local manifest_file="$output_dir/.manifest.json"
+
+    # Build checks JSON array
+    local checks_json="["
+    local first=true
+    for check in "${checks[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            checks_json+="$check"
+            first=false
+        else
+            checks_json+=",$check"
+        fi
+    done
+    checks_json+="]"
+
+    # Build issues JSON array
+    local issues_json="["
+    first=true
+    for issue in "${issues[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            issues_json+="\"$issue\""
+            first=false
+        else
+            issues_json+=",\"$issue\""
+        fi
+    done
+    issues_json+="]"
+
+    # Build warnings JSON array
+    local warnings_json="["
+    first=true
+    for warning in "${warnings[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            warnings_json+="\"$warning\""
+            first=false
+        else
+            warnings_json+=",\"$warning\""
+        fi
+    done
+    warnings_json+="]"
+
+    # Build comparison checks JSON array
+    local comparison_json="["
+    first=true
+    for check in "${comparison_checks[@]}"; do
+        if [[ "$first" == "true" ]]; then
+            comparison_json+="$check"
+            first=false
+        else
+            comparison_json+=",$check"
+        fi
+    done
+    comparison_json+="]"
+
+    cat > "$manifest_file" << EOF
+{
+  "prp_file": "$prp_file",
+  "prp_hash": "$prp_hash",
+  "output_dir": "$output_dir",
+  "check_date": "$(date +%Y-%m-%d)",
+  "structural_checks": {
+    "checks": $checks_json,
+    "issues": $issues_json,
+    "warnings": $warnings_json,
+    "grade": "$structural_grade",
+    "placeholder_count": $placeholder_count
+  },
+  "source_spec": {
+    "found": $has_source_spec,
+    "path": "${source_spec:-null}",
+    "comparison": {
+      "checks": $comparison_json,
+      "preserved": $comparison_preserved,
+      "missing": $comparison_missing
+    }
+  },
+  "domain_info": {
+    "domain_name": "${domain_name:-universal}",
+    "domain_count": ${domain_count:-0},
+    "total_invariants": ${total_invariants:-11}
+  },
+  "llm_analysis_prompt": {
+    "context": "prp_quality_check",
+    "focus": "Implementation readiness and extraction completeness",
+    "check_for": [
+      "Confidence score sanity check",
+      "NOT_SPECIFIED_IN_SPEC flags indicating extraction gaps",
+      "Thinking level appropriateness for complexity",
+      "Appendix content verification (schemas, code blocks)",
+      "Implementation blockers"
+    ],
+    "output_schema": {
+      "summary": "One sentence on PRP readiness",
+      "blockers": "Things that block implementation (max 5)",
+      "confidence_assessment": "Is stated confidence score reasonable?",
+      "extraction_gaps": "Content from spec not found in PRP (max 5)",
+      "suggestions": "Improvements to make PRP more actionable (max 5)"
+    }
+  }
+}
+EOF
+
+    # Save PRP content for Claude Code to analyze
+    cp "$prp_file" "$output_dir/prp-content.md"
+
+    # =========================================================================
+    # Output Summary
+    # =========================================================================
+    echo ""
+    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║  CHECK-PREPARE COMPLETE                                       ║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "PRP:        ${CYAN}$prp_file${NC}"
+    echo -e "Output:     ${CYAN}$output_dir${NC}"
+    echo -e "Manifest:   ${CYAN}$manifest_file${NC}"
+    echo ""
+    echo -e "${BLUE}Structural Checks:${NC}"
+    echo -e "  Grade:        ${CYAN}$structural_grade${NC}"
+    echo -e "  Issues:       ${CYAN}${#issues[@]}${NC}"
+    echo -e "  Warnings:     ${CYAN}${#warnings[@]}${NC}"
+    echo -e "  Placeholders: ${CYAN}$placeholder_count${NC}"
+    echo ""
+    if [[ "$has_source_spec" == "true" ]]; then
+        echo -e "${BLUE}Source Spec Comparison:${NC}"
+        echo -e "  Source:       ${CYAN}$source_spec${NC}"
+        echo -e "  Preserved:    ${CYAN}$comparison_preserved${NC}"
+        echo -e "  Missing:      ${CYAN}$comparison_missing${NC}"
+        echo ""
+    else
+        echo -e "${YELLOW}Source spec not found or not accessible${NC}"
+        echo ""
+    fi
+    echo -e "${BLUE}Domain Info:${NC}"
+    echo -e "  Domain:       ${CYAN}${domain_name:-universal}${NC}"
+    echo -e "  Invariants:   ${CYAN}${total_invariants:-11}${NC}"
+    echo ""
+    echo -e "${YELLOW}Ready for Claude Code LLM analysis.${NC}"
+    echo -e "Run: ${CYAN}/check ${prp_file}${NC}"
 }
 
 cmd_ralph_check() {
@@ -2619,33 +4561,58 @@ cmd_ralph_check() {
         llm_grade=$(echo "$llm_output" | tail -1)
     fi
 
-    # Summary
+    # Count issues and warnings from the output
+    local issue_count warning_count
+    issue_count=$(echo "$struct_output" | grep -c "✗" 2>/dev/null || true)
+    warning_count=$(echo "$struct_output" | grep -c "!" 2>/dev/null || true)
+    # Default to 0 if empty
+    issue_count=${issue_count:-0}
+    warning_count=${warning_count:-0}
+
+    # Summary with explicit review checklist
     echo ""
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}  THE PRP IS THE CONTRACT. Implementation must match PRP exactly.${NC}"
-    echo -e "${CYAN}  Fix compliance gaps before proceeding with execution.${NC}"
     echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
 
     if [[ "$struct_grade" == "FAIL" ]]; then
         echo -e "  Status: ${RED}COMPLIANCE ISSUES${NC}"
         echo -e "  Implementation deviates from PRP definitions."
-        echo -e "  ${YELLOW}→ Fix field names, routes, or validations to match PRP.${NC}"
     elif [[ "$struct_grade" == "NEEDS_WORK" ]]; then
         echo -e "  Status: ${YELLOW}ITEMS TO REVIEW${NC}"
-        echo -e "  Found potential compliance gaps. May need attention."
-        echo -e "  ${YELLOW}→ Review the issues above. PRP is the source of truth.${NC}"
+        echo -e "  Found potential compliance gaps."
     else
         echo -e "  Status: ${GREEN}COMPLIANT${NC}"
         echo -e "  Implementation appears to match PRP definitions."
-        echo -e "  ${YELLOW}→ Review LLM suggestions for additional insights.${NC}"
+    fi
+
+    # Explicit review checklist - ALL items require acknowledgment
+    echo ""
+    echo -e "${BLUE}───────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${YELLOW}HUMAN REVIEW CHECKLIST (all items require acknowledgment):${NC}"
+    echo ""
+
+    local review_count=0
+    if [[ $issue_count -gt 0 ]]; then
+        echo -e "  ${RED}[  ] $issue_count COMPLIANCE ISSUE(S)${NC} - Must fix before execution"
+        review_count=$((review_count + issue_count))
+    fi
+    if [[ $warning_count -gt 0 ]]; then
+        echo -e "  ${YELLOW}[  ] $warning_count WARNING(S)${NC} - Review and acknowledge each"
+        review_count=$((review_count + warning_count))
+    fi
+    if [[ $issue_count -eq 0 && $warning_count -eq 0 ]]; then
+        echo -e "  ${GREEN}[  ] All checks passed${NC} - Confirm implementation is ready"
+        review_count=1
     fi
 
     echo ""
-    echo -e "  ${CYAN}Next step: Fix issues, then execute with /design run${NC}"
+    echo -e "  Total items requiring human review: ${CYAN}$review_count${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 
     [[ "$quick" != "true" ]] && show_cost_summary
 
+    # ALWAYS require human acknowledgment - no exceptions
     require_review_acknowledgment "ralph-check" "$prp_file"
 
     echo ""
@@ -2742,10 +4709,16 @@ command -v python3 &> /dev/null || { echo -e "${RED}ERROR: Python3 not found${NC
 case "$COMMAND" in
     # Core commands (built-in)
     stress-test) cmd_stress_test "$FILE" "$REQUIREMENTS" "$JOURNEYS" "$QUICK" ;;
+    stress-test-prepare) cmd_stress_test_prepare "$FILE" "$REQUIREMENTS" "$JOURNEYS" "$OUTPUT" ;;
     validate) cmd_validate "$FILE" "$QUICK" ;;
+    validate-prepare) cmd_validate_prepare "$FILE" "$OUTPUT" ;;
+    spec-prepare) cmd_spec_prepare "$FILE" "$OUTPUT" "" "" ;;
     generate) cmd_generate "$FILE" "$OUTPUT" ;;
+    generate-prepare) cmd_generate_prepare "$FILE" "$OUTPUT" ;;
     check) cmd_check "$FILE" "$QUICK" ;;
+    check-prepare) cmd_check_prepare "$FILE" "$OUTPUT" ;;
     implement) cmd_implement "$FILE" "$OUTPUT" "$PHASE" ;;
+    implement-prepare) cmd_implement_prepare "$FILE" "$OUTPUT" ;;
     ralph-check) cmd_ralph_check "$FILE" "$STEPS_DIR" "$QUICK" ;;
     # Advanced commands (delegated)
     orchestrate) cmd_orchestrate "$FILE" "$@" ;;
