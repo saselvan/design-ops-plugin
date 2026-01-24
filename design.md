@@ -119,13 +119,16 @@ This skill is used by **Architect (Atlas)** for system design and **Engineer (De
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
+│  0. /design spec           "Generate spec FROM journey"         │
+│     └─► Creates: specs/{name}-spec.md from journey + personas   │
+│                                                                 │
 │  1. /design stress-test    "Is the spec COMPLETE?"              │
 │     └─► Checks: invariant violations, coverage gaps, blockers   │
 │                                                                 │
 │  2. /design validate       "Is the spec CLEAR?"                 │
 │     └─► Checks: ambiguity, vague terms, implicit assumptions    │
 │                                                                 │
-│  3. /design prp            "Compile to PRP"                     │
+│  3. /design prp            "Compile to PRP" (alias: generate)   │
 │     └─► Extracts: confidence, thinking level, verbatim content  │
 │     └─► **NEW: Runs dependency-trace (INV-L010, INV-L011)**     │
 │                                                                 │
@@ -154,9 +157,7 @@ This skill is used by **Architect (Atlas)** for system design and **Engineer (De
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**TDD Mode (INV-L007):** Tests are the sole contract. Implementation code is written by the AI coding agent to pass tests, not pre-generated in step files.
-
-**Don't skip steps.** Stress-test catches completeness issues. Validate catches clarity issues. test-validate catches test quality issues.
+**Don't skip steps.** Spec generates structure. Stress-test catches completeness. Validate catches clarity. All must pass before PRP generation.
 
 ---
 
@@ -210,8 +211,67 @@ Invariants: Universal (1-10) + {domain-specific if applicable}
 Next steps:
 1. Add research to docs/design/research/
 2. Define personas in docs/design/personas/
-3. Create specs in docs/design/specs/
-4. Run: /design validate docs/design/specs/your-spec.md
+3. Create journeys in docs/design/journeys/
+4. Run: /design spec docs/design/journeys/your-journey.md
+```
+
+---
+
+### /design spec {journey-file} [--output path]
+
+Generate a specification from a user journey document. Extracts pain points, goals, and steps into functional requirements.
+
+**Usage:**
+```
+/design spec docs/design/journeys/pathologist-search-journey.md
+/design spec journeys/checkout-flow.md --output specs/checkout-spec.md
+```
+
+**What It Does:**
+
+1. **Parses journey document:**
+   - Extracts journey steps (the WHAT)
+   - Identifies pain points (the PROBLEMS)
+   - Captures goals (the OUTCOMES)
+   - Notes persona references
+
+2. **Generates structured spec:**
+   - Problem statement from pain points
+   - Functional requirements from steps
+   - Success criteria from goals
+   - Non-functional requirements inferred
+
+3. **Prepares manifest for traceability:**
+   - Links spec back to source journey
+   - Tracks journey hash for change detection
+
+**Execution:**
+```bash
+./enforcement/design-ops-v3.sh spec-prepare "{journey-file}"
+# Reads manifest at output_dir/.manifest.json
+# Then generates spec using template
+```
+
+**Output:**
+```
+━━━ SPEC-PREPARE COMPLETE ━━━
+Journey:     journeys/pathologist-search-journey.md
+Output:      specs/pathologist-search-spec.md
+
+Extracted:
+  Steps:        14
+  Pain points:  8
+  Goals:        5
+  Personas:     1 (Dr. Sarah Chen)
+
+Generated spec sections:
+  - Problem Statement (from pain points)
+  - Scope (bounded by journey steps)
+  - Functional Requirements (14 FRs)
+  - Success Criteria (5 measurable criteria)
+  - Failure Modes (from pain points)
+
+Next: /design stress-test specs/pathologist-search-spec.md
 ```
 
 ---
@@ -2510,7 +2570,7 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.2 | 2026-01-23 | Ralph v2: Agent-driven execution, Playwright MCP integration, self-learning retry, dangerous mode |
+| 2.2 | 2026-01-22 | Added `/design spec` for journey-to-spec generation, unified workflow |
 | 2.1 | 2026-01-20 | Ralph Methodology for atomic implementation (implement, run, gate, status commands) |
 | 2.0 | 2026-01-19 | Multi-agent architecture, continuous validation, examples library, thinking levels |
 | 1.0 | 2026-01-19 | Initial release with validate, prp, review, report commands |
@@ -2522,11 +2582,16 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 | Command | Purpose | Key Output |
 |---------|---------|------------|
 | `/design init {name}` | Bootstrap project | Folder structure + templates |
-| `/design validate {spec}` | Check invariants | PASS/FAIL + fix suggestions |
-| `/design prp {spec}` | Generate PRP | Compiled PRP + quality score |
+| `/design spec {journey}` | Generate spec from journey | Structured spec with FRs |
+| `/design stress-test {spec}` | Check completeness | Invariant violations, gaps |
+| `/design validate {spec}` | Check clarity | PASS/FAIL + fix suggestions |
+| `/design prp {spec}` | Generate PRP (alias: generate) | Compiled PRP + quality score |
+| `/design check {prp}` | Verify PRP ready | Extraction completeness |
 | `/design implement {prp}` | Generate Ralph steps | Atomic steps + tests + gates |
-| `/design run [--dangerous]` | Agent-driven execution | Step result + Playwright verify |
+| `/design ralph-check {prp}` | Verify steps match PRP | Schema/route compliance |
+| `/design run [step]` | Execute with retry | Step result + progress |
 | `/design gate [n]` | Phase checkpoint | Gate pass/fail |
+| `/design verify {route}` | Playwright verification | UI element checks |
 | `/design status` | Implementation progress | Steps + gates status |
 | `/design learnings review` | Review captured learnings | Accept/Reject/Promote |
 | `/design review {spec} {impl}` | Check compliance | Coverage report |
@@ -2536,11 +2601,12 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 | `/design dashboard` | System health | All specs status |
 | `/design continuous start` | Background service | Continuous validation |
 | `/design retrospective {prp}` | Extract learnings | Retro + invariant proposals |
+| `/design freshness` | Methodology check | Update recommendations |
 
 ---
 
-*Skill version: 2.1*
-*Last updated: 2026-01-20*
+*Skill version: 2.2*
+*Last updated: 2026-01-22*
 *Enforcement tools: validator.sh v1.1, spec-to-prp.sh v1.1, prp-checker.sh v1.0*
 *Multi-agent system: spec-analyst, validator, prp-generator, reviewer, retrospective*
 *Continuous validation: watch-mode, continuous-validator, validation-dashboard*
