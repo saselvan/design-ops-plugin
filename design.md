@@ -149,10 +149,13 @@ This skill is used by **Architect (Atlas)** for system design and **Engineer (De
 │  8. /design test-validate  "Are tests valid & complete?"        │
 │     └─► Verifies: syntax, SC coverage, integration (INV-L008)   │
 │                                                                 │
-│  9. /design ralph-check    "Do tests match PRP?"                │
+│  9. /design test-cohesion  "Do tests work together?"            │
+│     └─► Verifies: no duplicates, fixtures, imports (INV-L009)   │
+│                                                                 │
+│ 10. /design ralph-check    "Do tests match PRP?"                │
 │     └─► Verifies: schema fields, routes, success criteria       │
 │                                                                 │
-│ 10. /design run            "AI writes code to pass tests"       │
+│ 11. /design run            "AI writes code to pass tests"       │
 │     └─► AI coding agent implements, tests verify, iterate       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -1558,7 +1561,89 @@ pytest --collect-only ./ralph-tests-feature
 ───────────────────────────────────────────────────────────────
 ```
 
-**Next step:** Fix issues, then `/design ralph-check`
+**Next step:** Fix issues, then `/design test-cohesion`
+
+---
+
+### /design test-cohesion {tests-dir}
+
+Validate that all tests work together as a cohesive suite. **Required after test-validate (INV-L009).**
+
+**Purpose:** Catch suite-wide issues that individual test validation misses.
+
+**Usage:**
+```
+/design test-cohesion ./ralph-tests-J-010
+```
+
+**What It Checks:**
+
+1. **Duplicate Function Names:**
+   - No two tests can have the same function name
+   - Duplicates cause pytest to skip tests silently
+
+2. **Fixture Availability:**
+   - All fixtures used by tests must be defined in conftest.py
+   - Missing fixtures cause collection failures
+
+3. **Import Collisions:**
+   - No conflicting imports across test files
+   - Aliases must be consistent
+
+4. **State Isolation:**
+   - Warn on module-level mutable state
+   - Warn on `global` keyword usage
+
+5. **Integration Test Exists (INV-L009):**
+   - Must have test_*integration*.py
+   - Integration test must cover full workflow
+
+**Execution (inline by LLM):**
+
+1. Collect all test_*.py files
+2. Parse with ast module
+3. Extract function names, fixtures, imports
+4. Run pytest --collect-only
+5. Report issues
+
+**Output:**
+```
+═══════════════════════════════════════════════════════════════
+  TEST COHESION CHECK - ralph-tests-J-010
+═══════════════════════════════════════════════════════════════
+
+━━━ Test Count ━━━
+  Files: 19
+  Test functions: 87
+  Integration test: ✓ test_16_integration.py
+
+━━━ Duplicate Names ━━━
+  ✓ No duplicates found
+
+━━━ Fixture Analysis ━━━
+  Fixtures defined: 5 (conftest.py)
+  Fixtures used: 8
+  ✓ All fixtures available
+
+━━━ Import Analysis ━━━
+  ✓ No collisions
+
+━━━ State Isolation ━━━
+  ⚠️ test_05.py uses module-level variable (line 15)
+
+━━━ Suite Collection ━━━
+  $ pytest --collect-only
+  87 tests collected
+  ✓ All tests collectable
+
+───────────────────────────────────────────────────────────────
+  STATUS: ✓ COHESIVE (1 warning)
+───────────────────────────────────────────────────────────────
+```
+
+**Blocking:** If duplicates, missing fixtures, or no integration test → BLOCK.
+
+**Next step:** `/design ralph-check`
 
 ---
 
