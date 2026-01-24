@@ -127,25 +127,36 @@ This skill is used by **Architect (Atlas)** for system design and **Engineer (De
 │                                                                 │
 │  3. /design prp            "Compile to PRP"                     │
 │     └─► Extracts: confidence, thinking level, verbatim content  │
+│     └─► **NEW: Runs dependency-trace (INV-L010, INV-L011)**     │
 │                                                                 │
 │  4. /design check          "Is the PRP READY?"                  │
 │     └─► Verifies: extraction completeness, source comparison    │
 │     └─► (Runs automatically after prp)                          │
 │                                                                 │
-│  5. HUMAN REVIEWS          ← YOU approve before implementation  │
+│  5. /design dependency-trace "Are all deps covered?"            │
+│     └─► Verifies: TODO→deliverable, table→CREATE (INV-L010/11) │
+│     └─► BLOCKS if any gaps found                                │
 │                                                                 │
-│  6. /design implement      "Generate Ralph steps"               │
-│     └─► Creates: step-NN.sh, test-NN.sh, gate-N.sh             │
+│  6. HUMAN REVIEWS          ← YOU approve before implementation  │
 │                                                                 │
-│  7. /design ralph-check    "Do steps match PRP?"                │
+│  7. /design implement      "Generate tests (TDD mode)"          │
+│     └─► Creates: test_NN.py, gate_N.py, conftest.py            │
+│     └─► NO step files - tests are the contract (INV-L007)       │
+│                                                                 │
+│  8. /design test-validate  "Are tests valid & complete?"        │
+│     └─► Verifies: syntax, SC coverage, integration (INV-L008)   │
+│                                                                 │
+│  9. /design ralph-check    "Do tests match PRP?"                │
 │     └─► Verifies: schema fields, routes, success criteria       │
 │                                                                 │
-│  8. /design run            "Execute with verification"          │
-│     └─► Runs: steps + tests + Playwright verification           │
+│ 10. /design run            "AI writes code to pass tests"       │
+│     └─► AI coding agent implements, tests verify, iterate       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Don't skip steps.** Stress-test catches completeness issues. Validate catches clarity issues. Both must pass before PRP generation.
+**TDD Mode (INV-L007):** Tests are the sole contract. Implementation code is written by the AI coding agent to pass tests, not pre-generated in step files.
+
+**Don't skip steps.** Stress-test catches completeness issues. Validate catches clarity issues. test-validate catches test quality issues.
 
 ---
 
@@ -1361,11 +1372,141 @@ Before generating output, verify:
 
 ---
 
-### /design ralph-check {prp-file} --steps {steps-dir}
+### /design dependency-trace {prp-file} --journey {journey-file}
 
-Validate Ralph implementation steps against the PRP contract before execution.
+Validate that all implicit dependencies have explicit deliverables. **Required before `/design implement` (INV-L010, INV-L011).**
 
-**The PRP is the source of truth.** This command ensures all generated steps use the exact field names, routes, and validation rules defined in the PRP.
+**Purpose:** Catch gaps like "table referenced but never created" or "TODO item with no deliverable."
+
+**Usage:**
+```
+/design dependency-trace ./prps/PRP-F-010.md --journey ./journeys/J-010.md
+```
+
+**What It Checks:**
+
+1. **TODO/⏳ Items (INV-L010):**
+   - Extract all `⏳|TODO|TBD|PENDING` from journey
+   - Verify each has a `F*.N` deliverable in PRP
+
+2. **Table Lineage (INV-L011):**
+   - Find all `INSERT INTO|UPDATE|DELETE FROM` statements
+   - Verify each table has a `CREATE TABLE` somewhere
+
+3. **External Services:**
+   - Find all endpoint/index/model references
+   - Verify each has a creation/deployment deliverable
+
+**Output:**
+```
+═══════════════════════════════════════════════════════════════
+  DEPENDENCY TRACE - PRP-F-010
+═══════════════════════════════════════════════════════════════
+
+━━━ TODO/⏳ Items ━━━
+  ✓ Vector Search index → F5.2
+  ✓ Model Serving endpoint → F1.2
+  ✗ pending_stakeholders table → MISSING
+
+━━━ Table Lineage ━━━
+  ✓ signals → CREATE in PRP-F-002
+  ✓ graph_nodes → CREATE in PRP-F-003
+  ✗ processing_logs → NO CREATE FOUND
+
+───────────────────────────────────────────────────────────────
+  STATUS: ❌ BLOCKED - 2 gaps
+───────────────────────────────────────────────────────────────
+```
+
+**Blocking:** If ANY gaps found, do not proceed to `/design implement`.
+
+---
+
+### /design test-validate {tests-dir}
+
+Validate generated test files before execution. **Required in TDD mode (INV-L007, INV-L008).**
+
+Since tests are the sole contract in TDD mode, they must be validated for:
+1. **Syntax correctness** - Tests compile without errors
+2. **SC coverage completeness** - Every Success Criterion has a test
+3. **Integration readiness** - Tests can run together as a suite
+
+**Usage:**
+```
+/design test-validate ./ralph-tests-feature
+/design test-validate ./ralph-tests-feature --strict
+```
+
+**What It Checks:**
+
+1. **Syntax Validation:**
+```bash
+python -m py_compile test_*.py
+```
+
+2. **SC Coverage Mapping:**
+```python
+# Extract SC-* references from test docstrings
+# Verify every SC in PRP has corresponding test
+```
+
+3. **Test Collection (pytest dry run):**
+```bash
+pytest --collect-only ./ralph-tests-feature
+```
+
+4. **Integration Check:**
+```bash
+# Verify conftest.py exists
+# Verify shared fixtures work
+# Verify no import conflicts
+```
+
+**Execution (inline by LLM):**
+
+1. Read all test_*.py files in directory
+2. Parse docstrings for SC-* references
+3. Compare to PRP Success Criteria table
+4. Report gaps and issues
+
+**Output:**
+```
+═══════════════════════════════════════════════════════════════
+  TEST VALIDATION (TDD Mode)
+═══════════════════════════════════════════════════════════════
+
+━━━ Syntax Check ━━━
+  ✓ test_01_forecast.py - valid
+  ✓ test_02_daily_ops.py - valid
+  ✗ test_03_newsletter.py - SyntaxError line 45
+
+━━━ SC Coverage ━━━
+  PRP Success Criteria: 15
+  Tests covering SC-*: 14
+  
+  MISSING:
+    ✗ SC-3.2: "Response time < 2s" - no test found
+
+━━━ Integration Check ━━━
+  ✓ conftest.py exists
+  ✓ pytest --collect-only: 47 tests collected
+  ✓ No import conflicts
+
+───────────────────────────────────────────────────────────────
+  Status: 1 SYNTAX ERROR, 1 MISSING SC
+  → Fix before proceeding to /design run
+───────────────────────────────────────────────────────────────
+```
+
+**Next step:** Fix issues, then `/design ralph-check`
+
+---
+
+### /design ralph-check {prp-file} --tests {tests-dir}
+
+Validate generated tests against the PRP contract before execution.
+
+**The PRP is the source of truth.** This command ensures all generated tests verify the exact field names, routes, and validation rules defined in the PRP.
 
 **Usage:**
 ```
@@ -1434,16 +1575,18 @@ The schema mismatches we experienced (fabric_id vs aims_code) happened because R
 
 **EXECUTABLE PROCEDURE - FOLLOW THESE STEPS EXACTLY**
 
+**TDD MODE (INV-L007):** In TDD mode, there are no step scripts. The AI coding agent writes implementation code to pass tests.
+
 ---
 
 ## STEP 1: LOCATE AND LOAD STATE
 
 ```
-ACTION: Find ralph-steps directory and load state
+ACTION: Find ralph-tests directory and load state
 ```
 
-1.1. Look for `ralph-steps/` in current directory
-1.2. Read `ralph-steps/ralph-state.json`
+1.1. Look for `ralph-tests-*/` in current directory (TDD mode) or `ralph-steps/` (legacy mode)
+1.2. Read `ralph-state.json`
 1.3. If not found: ERROR "No ralph-state.json. Run /design implement first."
 1.4. Extract: `current_step`, `total_steps`, `mode`, `dev_server.port`, `dev_server.command`
 1.5. Parse arguments:
@@ -1452,30 +1595,48 @@ ACTION: Find ralph-steps directory and load state
 
 ---
 
-## STEP 2: EXECUTE THE LOOP
+## STEP 2: EXECUTE THE LOOP (TDD MODE)
 
 ```
 FOR step_num FROM current_step TO total_steps:
 ```
 
-### 2.1 RUN STEP SCRIPT
+### 2.1 RUN TEST (EXPECT FAILURE)
 
 ```bash
-Bash: ./ralph-steps/step-{step_num:02d}.sh
+pytest ralph-tests-*/test_{step_num:02d}_*.py -v
 ```
 
-- If exit code != 0: Go to **STEP 3: HANDLE FAILURE**
-- If exit code == 0: Continue to 2.2
+- If exit code == 0 (unexpected pass): Log warning, continue to 2.5
+- If exit code != 0 (expected): Continue to 2.2
 
-### 2.2 RUN TEST SCRIPT
+### 2.2 AI IMPLEMENTS CODE TO PASS TEST
+
+Read the test file docstring for implementation instructions:
+- Target file path
+- Required components (endpoints, classes, functions)
+- Schema requirements from PRP
+
+**AI coding agent writes implementation code to pass the test.**
+
+### 2.3 RUN TEST (EXPECT PASS)
 
 ```bash
-Bash: ./ralph-steps/test-{step_num:02d}.sh
+pytest ralph-tests-*/test_{step_num:02d}_*.py -v
 ```
 
 - Capture FULL OUTPUT (stdout + stderr)
 - If exit code != 0: Go to **STEP 3: HANDLE FAILURE**
-- If exit code == 0: Continue to 2.3
+- If exit code == 0: Continue to 2.4
+
+### 2.4 VALIDATE IMPLEMENTATION
+
+Verify the created file:
+- File exists at target path
+- Contains required components from test docstring
+- No syntax errors
+
+Continue to 2.5
 
 ### 2.3 PARSE PLAYWRIGHT_VERIFY
 

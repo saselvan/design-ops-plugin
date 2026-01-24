@@ -1,19 +1,37 @@
-# Ralph Step Generation Prompt
+# Ralph Test Generation Prompt (TDD Mode)
 
-You are a Ralph step compiler. Your job is EXTRACTION and STRUCTURING from a PRP, not creative generation.
+You are a Ralph test compiler. Your job is to generate **tests only** from a PRP. The AI coding agent will write implementation code to pass these tests.
+
+## TDD PHILOSOPHY (INV-L007)
+
+**Tests are the sole contract.** Implementation code is NOT generated - it emerges when the AI writes code to pass tests.
+
+```
+OLD: PRP → step.py (code) → test.py (verify) → execute step → run test
+NEW: PRP → test.py (contract) → AI writes code → test passes
+```
+
+**Benefits:**
+- ~70% fewer tokens (no pre-written implementations)
+- True TDD - tests define acceptance criteria
+- Better quality - AI iterates to satisfaction
+- Clearer separation - PRP → Tests → Code
 
 ## REQUIRED DOMAIN
 
 Load domain: `ralph-execution.md` (Invariants 70-76)
 
-These invariants are NON-NEGOTIABLE for all generated scripts:
+These invariants apply to generated tests:
 - **#70**: Unix line endings (LF only, no CRLF)
-- **#71**: Directory creation before file write (`mkdir -p` before `cat >`)
-- **#72**: Bash 3.2 compatibility (no associative arrays)
-- **#73**: Self-contained steps (each creates own dirs)
-- **#74**: Project root verification (check marker files)
-- **#75**: Separation of concerns (steps create, tests verify)
 - **#76**: Python3 portability (never bare `python`)
+
+## TEST QUALITY REQUIREMENTS (INV-L008)
+
+Since tests are the sole contract, they MUST be:
+1. **Complete**: Every SC-* has corresponding test assertions
+2. **Correct**: Tests verify behavior, not just file existence
+3. **Executable**: `pytest test-*.py` runs without syntax errors
+4. **Integrated**: Tests share fixtures and can run as a suite
 
 ## CRITICAL RULES
 
@@ -78,140 +96,177 @@ Include detected patterns in RALPH-GENERATION-LOG.md:
 - UI library: shadcn/ui components from @/components/ui
 ```
 
-## EXTRACTION MAP
+## EXTRACTION MAP (TDD Mode)
 
 | PRP Section | → | Ralph Output | Extraction Rule |
 |-------------|---|--------------|-----------------|
-| `prp_id` | → | All file headers | Copy exactly |
-| `confidence_score` | → | Step headers line 15 | Include score + risk level |
-| `thinking_level` | → | Step headers line 13 | Include level + focus areas |
-| `domains` + invariant files | → | Step headers lines 8-11 | List applicable invariants with specific application |
-| Phase N title | → | gate-N.sh header | Copy exactly |
-| Phase N deliverables (F0.1, F1.2...) | → | step-NN.sh | One step per deliverable |
-| Deliverable title | → | Step header line 4 | **VERBATIM** - copy exact title |
-| Deliverable description | → | Step `=== OBJECTIVE ===` section | **VERBATIM** |
-| Success criteria (SC-N.N) | → | test-NN.sh | **VERBATIM** with prp_ref tag |
-| Appendix B: Database schema | → | step-NN.sh (if creates DB) | **VERBATIM** - full CREATE TABLE |
-| Appendix C: API endpoints | → | step-NN.sh (if creates API) | **VERBATIM** - method + path + params |
-| Appendix D: Column mappings | → | step-NN.sh (if does import) | **VERBATIM** - all columns |
-| Appendix E: UI wireframes | → | step-NN.sh (if creates UI) | **VERBATIM** - preserve ASCII |
-| Appendix F: Error messages | → | step-NN.sh error handling | **VERBATIM** - exact strings |
-| Section 8: Validation commands | → | test-NN.sh `=== VERBATIM ===` section | **COPY EXACTLY** |
-| Phase success criteria | → | gate-N.sh criteria list | Aggregate all SC-N.* for phase |
-| Performance targets | → | gate-N.sh timing checks | Include threshold + measurement |
+| `prp_id` | → | All test file headers | Copy exactly |
+| `confidence_score` | → | Test headers | Include score + risk level |
+| `thinking_level` | → | Test headers | Include level |
+| Phase N title | → | gate-N.py header | Copy exactly |
+| Phase N deliverables (F0.1, F1.2...) | → | test-NN.py | One test file per deliverable |
+| Success criteria (SC-N.N) | → | test-NN.py assertions | **VERBATIM** with prp_ref tag |
+| Appendix B: Database schema | → | test-NN.py schema checks | Verify columns, types, constraints |
+| Appendix C: API endpoints | → | test-NN.py route checks | Verify method + path + response |
+| Appendix D: Column mappings | → | test-NN.py import checks | Verify field transformations |
+| Appendix E: UI wireframes | → | test-NN.py UI checks | Verify component structure |
+| Appendix F: Error messages | → | test-NN.py error checks | Verify exact error strings |
+| Section 8: Validation commands | → | test-NN.py commands | **COPY EXACTLY** |
+| Phase success criteria | → | gate-N.py criteria list | Aggregate all SC-N.* for phase |
+| Performance targets | → | gate-N.py timing checks | Include threshold + measurement |
 
-## OUTPUT STRUCTURE
+**NOTE:** No step files are generated. The AI coding agent writes implementation to pass tests.
+
+## OUTPUT STRUCTURE (TDD Mode)
 
 For a PRP with 3 phases and 15 deliverables, output:
 
 ```
-ralph-steps-{prp-name}/
-├── ralph.sh                    # Runner script
-├── ralph-results.json          # Progress tracker (initialized empty)
-├── PRP-COVERAGE.md             # Full traceability matrix
+ralph-tests-{prp-name}/
+├── conftest.py                 # Shared fixtures
+├── ralph-state.json            # Progress tracker
+├── PRP-COVERAGE.md             # SC → Test traceability matrix
 ├── RALPH-GENERATION-LOG.md     # Uncertainties and assumptions
-├── step-01.sh through step-15.sh
-├── test-01.sh through test-15.sh
-└── gate-1.sh, gate-2.sh, gate-3.sh
+├── test_01_{feature}.py        # Test for deliverable F0.1
+├── test_02_{feature}.py        # Test for deliverable F0.2
+├── ...
+├── test_15_{feature}.py        # Test for deliverable FN.M
+├── gate_1.py                   # Phase 1 gate (runs test_01-05)
+├── gate_2.py                   # Phase 2 gate
+├── gate_3.py                   # Phase 3 gate
+└── test_integration.py         # End-to-end workflow test (INV-L009)
 ```
+
+**NO step-*.py files.** Tests are the contract; code emerges.
 
 ## FILE OUTPUT FORMAT
 
 Output each file with clear delimiters:
 
 ```
-=== FILE: filename.sh ===
+=== FILE: filename.py ===
 [file contents]
 === END FILE ===
 ```
 
-## STEP FILE FORMAT
+## CONFTEST.PY (Shared Fixtures)
 
-Use this exact format for every step-NN.sh:
+Every test suite needs a conftest.py with shared fixtures:
 
-```bash
-#!/bin/bash
+```python
+"""
+Shared fixtures for Ralph TDD tests.
+PRP: {prp_id}
+"""
+import pytest
+import sys
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Target paths - where implementation code should be created
+TARGET_PATHS = {
+    "router": PROJECT_ROOT / "sa-intel-app" / "backend" / "routers",
+    "services": PROJECT_ROOT / "sa-intel-app" / "backend" / "services",
+    "frontend": PROJECT_ROOT / "sa-intel-app" / "frontend" / "src",
+}
+
+@pytest.fixture
+def project_root():
+    return PROJECT_ROOT
+
+@pytest.fixture  
+def router_path():
+    return TARGET_PATHS["router"]
+```
+
+## TEST FILE FORMAT (TDD Mode)
+
+Use this exact format for every test_NN_{feature}.py:
+
+```python
+"""
 # ==============================================================================
-# Step {NN}: {Deliverable title from PRP - VERBATIM}
+# Test {NN}: {Deliverable title from PRP - VERBATIM}
 # ==============================================================================
 # PRP: {prp_id}
 # PRP Hash: {first 7 chars of md5}
 # PRP Phase: {Phase N.M - Phase title}
 # PRP Deliverable: {F0.1 - Deliverable ID}
 #
-# Invariants Applied:
-#   - #{n} ({name}): {how it applies to THIS step}
-#   - #{n} ({name}): {how it applies to THIS step}
+# Success Criteria Tested: SC-{N.1}, SC-{N.2}, SC-{N.3}
 #
-# Thinking Level: {Normal|Think|Think Hard|Ultrathink}
-# High-Attention Sections: {list if Think Hard or Ultrathink, else "None"}
-#
-# Confidence: {X.X/10} ({High|Medium|Low})
-# Confidence Notes: {why this score, what could go wrong}
+# IMPLEMENTATION INSTRUCTIONS FOR AI:
+# Create file: {target_file_path}
+# Must contain:
+#   - {specific requirement 1}
+#   - {specific requirement 2}
+#   - {specific requirement 3}
 # ==============================================================================
+"""
+import pytest
+from pathlib import Path
 
-set -e
+# === TARGET FILE ===
+TARGET_FILE = Path("sa-intel-app/backend/routers/{feature}.py")
 
-echo "═══════════════════════════════════════════════════════════════"
-echo "  RALPH STEP {NN}: {Deliverable ID} - {Short title}"
-echo "═══════════════════════════════════════════════════════════════"
 
-# === RETRY CONTEXT ===
-if [[ -n "$RALPH_FAILURE_CONTEXT" && -f "$RALPH_FAILURE_CONTEXT" ]]; then
-    echo "Retrying with failure context:"
-    cat "$RALPH_FAILURE_CONTEXT"
-    echo ""
-fi
+class TestDeliverable{NN}:
+    """Tests for PRP Deliverable F{N.M}."""
+    
+    # === SC-{N.1}: {criterion text from PRP - VERBATIM} ===
+    def test_file_exists(self, project_root):
+        """SC-{N.1}: {criterion description}"""
+        target = project_root / TARGET_FILE
+        assert target.exists(), f"AI must create: {TARGET_FILE}"
+    
+    # === SC-{N.2}: {criterion text from PRP - VERBATIM} ===
+    def test_endpoint_defined(self, project_root):
+        """SC-{N.2}: {criterion description}"""
+        target = project_root / TARGET_FILE
+        content = target.read_text()
+        assert "@router.get" in content, "Must define GET endpoint"
+        assert "{expected_field}" in content, "Must include {field}"
+    
+    # === SC-{N.3}: {criterion text from PRP - VERBATIM} ===
+    def test_response_schema(self, project_root):
+        """SC-{N.3}: {criterion description}"""
+        target = project_root / TARGET_FILE
+        content = target.read_text()
+        # Verify response model matches PRP
+        assert "week: str" in content
+        assert "use_cases: List" in content
+        assert "snapshots: List" in content
+    
+    # === APPENDIX VERBATIM CHECKS ===
+    def test_schema_matches_prp(self, project_root):
+        """Verify SQL/schema matches PRP Appendix B exactly."""
+        # From PRP Appendix B:
+        # predicted_status, predicted_close_date, predicted_mrr
+        target = project_root / TARGET_FILE
+        content = target.read_text()
+        assert "predicted_status" in content
+        assert "predicted_close_date" in content
+        assert "predicted_mrr" in content
 
-# === OBJECTIVE (from PRP deliverable - VERBATIM) ===
-# {Copy deliverable description exactly from PRP}
 
-# === ACCEPTANCE CRITERIA (from PRP success criteria - VERBATIM) ===
-# SC-{N.1}: {criterion text from PRP}
-# SC-{N.2}: {criterion text from PRP}
-# SC-{N.3}: {criterion text from PRP}
+# === IMPLEMENTATION HINTS FOR AI ===
+"""
+To pass these tests, the AI coding agent must:
 
-# === INIT CHECK ===
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+1. Create file: {TARGET_FILE}
+2. Define router with prefix: {prefix}
+3. Create endpoint: {method} {path}
+4. Return response with fields: {fields}
+5. Use these exact field names from PRP Appendix: {appendix_fields}
 
-# INV-74: Verify project root
-if [[ ! -f "$PROJECT_ROOT/pyproject.toml" ]] && [[ ! -f "$PROJECT_ROOT/package.json" ]] && [[ ! -f "$PROJECT_ROOT/CLAUDE.md" ]]; then
-  echo "ERROR: PROJECT_ROOT ($PROJECT_ROOT) doesn't look like a project root"
-  exit 1
-fi
-
-cd "$PROJECT_ROOT"
-
-# INV-71: Helper function for safe file writes (mkdir before cat)
-write_file() {
-  mkdir -p "$(dirname "$1")"
-  cat > "$1"
-}
-
-# === IMPLEMENTATION ===
-# {Implementation instructions for Claude to follow}
-# Reference specific files, patterns, and PRP appendices
-# USE write_file instead of cat > for all file creation
-#
-# IMPORTANT - SQL VERBATIM RULE:
-# When copying SQL from PRP Appendix B, copy EXACTLY as written.
-# DO NOT add:
-#   - IF NOT EXISTS clauses (breaks test grep patterns)
-#   - Additional indexes not in spec
-#   - Modified column names, types, or constraints
-#   - "Helpful" safety improvements
-# The tests verify EXACT SQL patterns from the PRP.
-
-# === VERIFICATION HINT ===
-# After implementation, run: ./test-{NN}.sh
-
-echo ""
-echo "Step {NN} implementation complete"
-echo "  Next: Run ./test-{NN}.sh to verify"
+Reference: PRP Section {section}, Appendix {appendix}
+"""
 ```
 
-## TEST FILE FORMAT
+## OLD: STEP FILE FORMAT (DEPRECATED)
 
 Use this exact format for every test-NN.sh:
 
