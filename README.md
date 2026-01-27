@@ -1,8 +1,8 @@
-# Design Ops v2.0
+# Design Ops v2.2
 
-A spec compiler for Claude Code. Transforms human intent into validated, AI-executable specifications.
+The production gold standard for AI-assisted system design. Transforms human intent into validated, executable specifications and PRPs through automated invariant enforcement.
 
-**Version**: 2.0 | **Status**: Production Ready | **License**: MIT
+**Version**: 2.2 | **Status**: Production Gold Standard | **License**: MIT
 
 ---
 
@@ -71,89 +71,121 @@ Design Ops is a comprehensive methodology for designing and implementing softwar
 
 ---
 
-## What's New in v2.0
+## v2.2 Current: Production Gold Standard
 
-**Enhanced with AI-Execution Optimization** (January 2026)
+Design Ops v2.2 (January 2026) is the definitive specification system for AI-assisted development:
 
-Based on comprehensive analysis of 2025 agentic engineering methodologies (Cole Medin, Spec-Kit, BMAD, Anthropic), v2.0 adds:
-
-| Feature | Description |
-|---------|-------------|
-| Spec Validation | 43 invariants enforce clarity and completeness |
-| PRP Generation | Automated transformation from specs to AI-executable PRPs |
-| Confidence Scoring | Quantitative risk assessment (1-10 scale) |
-| Implementation Review | Verify code matches design intent |
-| Codebase Awareness | Auto-extract conventions and patterns |
-
----
-
-## Quick Start
-
-### 1. Validate a Spec
-
-```bash
-/design validate specs/S-001-feature.md
-```
-
-### 2. Generate PRP
-
-```bash
-/design prp specs/S-001-feature.md
-```
-
-### 3. Review Implementation
-
-```bash
-/design review specs/S-001-feature.md src/feature/
-```
-
-See [QUICKSTART.md](enforcement/QUICKSTART.md) for the 5-minute guide.
+| Core Capability | Benefit |
+|-----------------|---------|
+| **43 Invariant Validation** | Catches ambiguity, incompleteness, and design errors before code |
+| **11-Step Validated Pipeline** | Stress-test → Validate → Generate → Check → Implement → Test → Deploy |
+| **PRP Compilation** | Transforms specs into AI-executable Product Requirements Prompts |
+| **Confidence Scoring** | Quantitative risk assessment (1-10) gates implementation |
+| **Multi-Domain Support** | Universal + 6 domain-specific invariant sets |
+| **Continuous Validation** | Watch-mode real-time spec health monitoring |
+| **Learning Loops** | Retrospectives improve system over time |
 
 ---
 
-## Architecture
+## Quick Start (v2.2)
+
+**Follow the 11-step pipeline. Skip nothing.** Each step catches different problems:
+
+### The Pipeline (in order)
+
+```bash
+/design spec journey.md               # 0. Create spec from journey
+/design stress-test specs/feature.md  # 1. Check completeness
+/design validate specs/feature.md     # 2. Check clarity
+/design prp specs/feature.md          # 3. Compile to PRP
+/design check PRPs/feature-prp.md     # 4. Verify PRP quality
+/design implement PRPs/feature-prp.md # 5. Generate tests (TDD)
+/design test-validate test_*.py       # 6. Validate test suite
+/design test-cohesion tests/          # 7. Check test interactions
+/design ralph-check PRPs/feature-prp.md # 8. Verify PRP compliance
+/design run PRPs/feature-prp.md       # 9. AI implements to spec
+# 10. Retrospective (learning loop)
+```
+
+**Why this order?** Specs generate structure. Stress-test finds incompleteness. Validate finds ambiguity. All must pass before PRP generation.
+
+See [QUICKSTART.md](enforcement/QUICKSTART.md) for the complete 5-minute guide.
+
+---
+
+## Why v2.2 is Production Gold Standard
+
+**Invariant-Enforced Design**: 43 domain-aware invariants catch design issues at spec-time, before implementation. Not suggestions—hard gates.
+
+**Validated Pipeline**: The 11-step workflow is non-negotiable. Each step enforces different constraints:
+- Steps 0-2: Spec completeness and clarity
+- Step 3: PRP compilation
+- Step 4: Quality assurance
+- Steps 5-8: Test-driven implementation prep
+- Steps 9-10: AI implementation + learning
+
+**Multi-Agent Architecture**: Spec-analyst, validator, conventions-checker, PRP-generator, and reviewer agents run in parallel, each with specific expertise.
+
+**Confidence-Gated Implementation**: Quantitative risk assessment (1-10) prevents overconfident decisions. A 6/10 spec doesn't get built without explicit acknowledgment.
+
+**Codebase Integration**: Automatic CONVENTIONS.md extraction ensures implementations match project patterns.
+
+---
+
+## Architecture (v2.2)
 
 ```
-Design Ops v2.0
+Design Ops v2.2 (Production Gold Standard)
 ├── Core Skill
-│   └── design.md                    # Claude Code skill file
+│   └── design.md                    # Main Claude Code skill
 │
-├── Validation System
-│   ├── validator.sh                 # 43 invariants enforcement
-│   ├── system-invariants.md         # Universal invariants (1-10)
-│   └── domains/                     # Domain-specific invariants
-│       ├── consumer-product.md      # 11-15
+├── Validation Engine (43 Invariants)
+│   ├── validator.sh                 # Enforcement runner
+│   ├── system-invariants.md         # Universal (1-11)
+│   └── domains/                     # Domain-specific
+│       ├── consumer-product.md      # 12-15
 │       ├── physical-construction.md # 16-21
 │       ├── data-architecture.md     # 22-26
 │       ├── integration.md           # 27-30
 │       ├── remote-management.md     # 31-36
 │       └── skill-gap-transcendence.md # 37-43
 │
-├── PRP Generation
-│   ├── spec-to-prp.sh               # Spec → PRP generator
-│   ├── prp-checker.sh               # PRP quality checker
-│   ├── confidence-calculator.sh     # Risk assessment
+├── 11-Step Pipeline
+│   ├── design-ops-v3.sh             # Main orchestrator
+│   ├── stress-test                  # Completeness check
+│   ├── validate                     # Clarity check
+│   ├── generate (prp)               # PRP compilation
+│   ├── check                        # Quality assurance
+│   ├── implement                    # TDD test generation
+│   ├── test-validate                # Test suite validation
+│   ├── test-cohesion                # Test interaction check
+│   ├── ralph-check                  # PRP compliance
+│   ├── run                          # AI implementation
+│   └── retrospective                # Learning loop
+│
+├── PRP Generation & Checking
+│   ├── spec-to-prp.sh
+│   ├── prp-checker.sh
+│   ├── confidence-calculator.sh
 │   └── templates/
-│       ├── prp-base.md              # Master PRP template
-│       ├── confidence-rubric.md     # Scoring guidelines
-│       ├── section-library.md       # Reusable sections
-│       └── prp-examples/            # 3 complete examples
 │
-├── Supporting Tools
-│   └── tools/
-│       ├── conventions-generator.sh # Extract codebase patterns
-│       └── conventions-updater.sh   # Update CONVENTIONS.md
+├── Pattern Extraction
+│   ├── conventions-generator.sh
+│   └── CONVENTIONS.md templates
 │
-├── Testing
-│   ├── test-suite/                  # Validator tests
-│   └── test-integration/            # End-to-end tests
+├── Continuous Validation
+│   ├── watch-mode.sh                # Real-time monitoring
+│   ├── continuous-validator.sh      # Background service
+│   └── validation-dashboard.sh      # Health status UI
 │
-├── CI/CD
-│   ├── .github/workflows/           # GitHub Actions
-│   └── docs/git-hooks/              # Pre-commit hooks
+├── Testing & CI/CD
+│   ├── test-suite/
+│   ├── test-integration/
+│   └── .github/workflows/
 │
 └── Documentation
-    ├── README.md (this file)
+    ├── README.md (v2.2 overview)
+    ├── SKILL.md (command reference)
     ├── QUICKSTART.md
     └── docs/
 ```
@@ -308,20 +340,27 @@ cd test-integration && ./real-project-test.sh
 
 ---
 
-## Version History
+## Version Timeline
 
-**v2.0** (2026-01-20)
-- Added AI-execution optimization
-- Integrated spec validation (43 invariants)
-- Added PRP generation and quality checking
-- Added confidence scoring
-- Added implementation review
-- Added CONVENTIONS.md generator
+**v2.2** (2026-01-26) — Production Gold Standard
+- Finalized 11-step validated pipeline
+- Multi-agent parallel architecture (spec-analyst, validator, CONVENTIONS-checker, prp-generator, reviewer)
+- Confidence-gated implementation gates
+- Continuous validation (watch-mode + dashboard)
+- Complete retrospective learning system
 
-**v1.0** (Original)
+**v2.0** (2026-01-20) — AI-Execution Optimization
+- 43-invariant validation system
+- PRP generation + quality checking
+- Confidence scoring framework
+- Implementation review workflow
+
+**v1.0** (Original) — Foundation
 - Research → Journeys → Specs → Implementation
 - Manual handoff to implementation
 - Retrospective learning loops
+
+*v2.2 supersedes all prior versions. Do not use v1.0 or v2.0.*
 
 ---
 

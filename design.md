@@ -1,16 +1,18 @@
 ---
 name: Design
-description: Enhanced Design Ops workflow with invariant enforcement, multi-agent orchestration, and continuous validation. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation, watch mode.
+description: Design Ops v2.2 gold standard. Transform intent → validated specs → executable PRPs through 11-step invariant-enforced pipeline with multi-agent architecture. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
 version: "2.2"
 ---
 
-# Design Ops Skill
+# Design Ops v2.2 Skill
 
-Enhanced design workflow that transforms human intent into agent-executable PRPs through invariant enforcement.
+**PRODUCTION GOLD STANDARD FOR AI-ASSISTED SYSTEM DESIGN**
 
-## Overview
+Design Ops v2.2 transforms human intent into validated specifications and AI-executable PRPs through a rigorous 11-step invariant-enforced pipeline. This is the definitive workflow—do not deviate.
 
-Design Ops v2.0 features a multi-agent architecture for comprehensive spec validation and PRP generation:
+## Multi-Agent Architecture
+
+The pipeline executes 5 specialized agents in coordinated sequence:
 
 ```
                          Spec (human intent)
@@ -76,40 +78,67 @@ Design Ops v2.0 features a multi-agent architecture for comprehensive spec valid
             └─────────────────────┘
 ```
 
-### Continuous Validation Mode
+---
+
+## Why v2.2 is Production Gold Standard
+
+**Invariant enforcement as hard gates**: 43 invariants (11 universal + 32 domain-specific) catch design issues at spec-time, not production. The system rejects bad specs; it doesn't attempt fixes.
+
+**11-step non-negotiable pipeline**: Each step is sequential for a reason. Specs generate structure. Stress-test finds incompleteness. Validate finds ambiguity. All must pass before PRP generation.
+
+**Confidence-gated implementation**: Quantitative risk assessment (1-10 scale) prevents overconfident decisions. A 6/10 spec gets built WITH EXPLICIT RISK ACKNOWLEDGMENT.
+
+**Multi-agent parallel analysis**: Spec-analyst, validator, CONVENTIONS-checker, PRP-generator, and reviewer agents run in coordinated sequence, each with specific expertise.
+
+**Automatic CONVENTIONS enforcement**: Extracts codebase patterns and ensures implementations match project style, not just functional requirements.
+
+**Learning loops built in**: Retrospectives after implementation extract learnings, propose new invariants, continuously improve the system.
+
+---
+
+## The Workflow
+
+Use this exact sequence. Skip nothing.
 
 ```
-┌─────────────────┐
-│  watch-mode.sh  │ ← Monitors spec files
-│                 │
-│ • File changes  │
-│ • Real-time     │
-│   confidence    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│continuous-      │ ← Background service
-│validator.sh    │
-│                 │
-│ • Multi-spec    │
-│ • Webhooks      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│validation-      │ ← Terminal dashboard
-│dashboard.sh    │
-│                 │
-│ • Health status │
-│ • Trends        │
-│ • Alerts        │
-└─────────────────┘
+INTENT (user story, journey, or problem statement)
+  ↓
+0. /design spec {journey}                           Create spec from journey
+  ↓
+SPECIFICATION
+  ↓
+1. /design stress-test {spec}                       Check COMPLETENESS
+  ↓ (MUST PASS)
+2. /design validate {spec}                          Check CLARITY
+  ↓ (MUST PASS)
+VALIDATED SPEC
+  ↓
+3. /design prp {spec}                               Compile to PRP
+4. /design check {prp}                              Verify PRP quality
+  ↓ (MUST PASS)
+EXECUTABLE PRP
+  ↓
+5. /design implement {prp}                          Generate tests (TDD)
+6. /design test-validate {tests}                    Validate test syntax
+7. /design test-cohesion {tests}                    Verify test interactions
+8. /design ralph-check {prp}                        Verify PRP compliance
+  ↓ (MUST PASS)
+TEST SUITE + READY-TO-IMPLEMENT PRP
+  ↓
+9. /design run {prp}                                AI implements to spec
+  ↓
+IMPLEMENTATION
+  ↓
+10. Retrospective                                   Extract learnings
+  ↓
+LEARNINGS → System improvements
 ```
 
-## Agent
+---
 
-This skill is used by **Architect (Atlas)** for system design and **Engineer (Dev)** for implementation review.
+## Agent Usage
+
+This skill is used by design systems engineers and implementation teams. You will follow the 11-step pipeline exactly.
 
 ## Command Reference
 

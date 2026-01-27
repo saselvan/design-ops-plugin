@@ -1,136 +1,181 @@
 ---
 name: design
-description: Create implementation specs, PRPs, and maintain agentic engineering standards. USE WHEN design, spec, implementation plan, PRP, architecture, freshness check.
+description: Design Ops v2.2 gold standard. Transform intent → validated specs → executable PRPs through 11-step invariant-enforced pipeline. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
 ---
 
-# Design Ops
+# Design Ops v2.2 Skill
 
-Structured approach to planning AI-assisted implementation through PRPs (Planning & Requirements Packets) and Implementation Specs.
+**THIS IS THE PRODUCTION GOLD STANDARD.** You MUST follow the 11-step validated pipeline exactly as written. Each step is non-negotiable.
 
-## Workflow Routing
+## The 11-Step Pipeline (You Must Follow This)
 
-| Request Type | Workflow | Context |
-|--------------|----------|---------|
-| New feature/project | → `/design prp` | Shared |
-| Bug fix / small change | → `/design spec` | Shared |
-| Validate spec | → `/design-validate` | Forked |
-| Review implementation | → `/design-review` | Forked |
-| Full pipeline | → `/design-orchestrate` | Forked |
-| System freshness | → `/design-freshness` | Forked |
+Design Ops v2.2 enforces a single, non-negotiable workflow:
+
+```
+0. /design spec {journey}              ← Create spec FROM journey
+1. /design stress-test {spec}          ← Check COMPLETENESS
+2. /design validate {spec}             ← Check CLARITY
+3. /design prp {spec}                  ← Compile to PRP (alias: generate)
+4. /design check {prp}                 ← Verify PRP QUALITY
+5. /design implement {prp}             ← Generate TESTS (TDD)
+6. /design test-validate {tests}       ← Validate TEST SUITE
+7. /design test-cohesion {tests}       ← Check TEST INTERACTIONS
+8. /design ralph-check {prp}           ← Verify PRP COMPLIANCE
+9. /design run {prp}                   ← AI IMPLEMENTS
+10. Retrospective (learning loop)      ← Extract LEARNINGS
+```
+
+**Why This Order Matters:**
+
+| Steps | Purpose | Catches |
+|-------|---------|---------|
+| 0-2   | Specification validation | Incompleteness, ambiguity, vague terms |
+| 3-4   | PRP compilation & QA | Incomplete extraction, structural issues |
+| 5-8   | Test preparation & verification | Test design gaps, coverage issues |
+| 9-10  | Implementation & learning | Edge cases, retrospective patterns |
+
+**Critical Rule**: You may not skip steps. Each catches different problems. Skipping will cause preventable failures.
 
 ## Context Architecture
 
-Design Ops uses **forked context** for heavy operations to keep the main conversation clean:
+Design Ops splits heavy operations into forked context to keep main conversation clean:
 
 ```
-Main Context (shared)              Forked Context (isolated)
-─────────────────────              ─────────────────────────
-/design prp                        /design-validate
-/design spec                       /design-review
-/design init                       /design-orchestrate
-/design dashboard                  /design-freshness
-/design report
+Main (shared)           Forked (isolated)
+─────────────           ─────────────────
+/design spec            /design stress-test
+/design init            /design validate
+/design dashboard       /design check
+                        /design test-validate
+                        /design test-cohesion
 ```
 
-**Why fork?**
-- Heavy operations (validation, research, multi-agent) don't bloat main context
-- Forked skills return concise summaries
-- Main conversation stays focused on decision-making
+Forked operations return concise summaries; full analysis stays isolated.
 
-## Commands
+## Command Reference (v2.2 Pipeline)
 
-### Shared Context Commands
+### Step 0: Spec Creation
 
-#### `/design prp`
-Create a Planning & Requirements Packet for a new initiative.
-- May reference conversation context ("the feature we discussed")
-- Interactive placeholder filling
+#### `/design spec {journey-file}`
+Generate a specification from a user journey.
+- **Input**: Journey markdown file with steps, pain points, goals
+- **Output**: Structured spec (problem, requirements, success criteria)
+- **Next**: `/design stress-test`
 
-#### `/design spec`
-Create an implementation specification for a defined scope.
+### Steps 1-2: Validation Gates (Must Both Pass)
 
-#### `/design init {project}`
-Bootstrap a new project with Design Ops structure.
+#### `/design stress-test {spec}`
+Check spec COMPLETENESS against domain invariants.
+- Detects: Missing error cases, null states, external failures, concurrency issues
+- Returns: PASS or REVIEW REQUIRED with specific blockers
+- **Next**: Fix blockers, then `/design validate`
 
-#### `/design dashboard`
-Display validation dashboard for all specs.
+#### `/design validate {spec}`
+Check spec CLARITY (invariants 1-11).
+- Detects: Ambiguity, implicit assumptions, untestable criteria, silent failures
+- Returns: PASS or REJECTED with fixes
+- **Next**: `/design prp`
 
-#### `/design report {project}`
-Generate project status report.
+### Step 3: PRP Compilation
 
-### Forked Context Commands
+#### `/design prp {spec}` (alias: `/design generate`)
+Compile validated spec into executable PRP.
+- Extracts: confidence, thinking level, verbatim content, patterns
+- Runs dependency-trace (INV-L010/L011)
+- **Next**: `/design check`
 
-#### `/design-validate {spec}`
-Validate spec against system invariants.
-- Returns: PASS/FAIL + violation summary
-- Full details in forked context
+### Steps 4-8: Quality Assurance Pipeline
 
-#### `/design-review {spec} {implementation}`
-Review implementation against spec for compliance.
-- Returns: Coverage % + gap summary
-- Full file scan in forked context
+#### `/design check {prp}`
+Verify PRP quality and extraction completeness.
+- Compares source spec vs generated PRP content
+- Detects: Missing sections, unfilled placeholders, LLM artifacts
+- **Next**: Human review, then `/design implement`
 
-#### `/design-orchestrate {spec}`
-Run multi-agent pipeline (analysis → generation → review).
-- Returns: Status + output file paths
-- Multi-agent coordination in forked context
+#### `/design implement {prp}`
+Generate test suite (TDD mode).
+- Creates: test_NN.py, gate_N.py, conftest.py
+- No step files — tests ARE the contract
+- **Next**: `/design test-validate`
 
-#### `/design-freshness [quick|full]`
-Check Design Ops currency against agentic engineering landscape.
-- Returns: Health score + top priorities
-- Web research in forked context
+#### `/design test-validate {test-files}`
+Validate test suite (syntax, coverage, integration).
+- **Next**: `/design test-cohesion`
 
-## Sub-Skills
+#### `/design test-cohesion {test-directory}`
+Verify test interactions (no duplicates, fixtures, imports).
+- **Next**: `/design ralph-check`
 
-Located in `skills/` directory:
+#### `/design ralph-check {prp}`
+Verify PRP compliance with schema and routes.
+- **Next**: `/design run`
 
-| Skill | File | Context | Purpose |
-|-------|------|---------|---------|
-| design-validate | `skills/validate.md` | fork | Invariant validation |
-| design-review | `skills/review.md` | fork | Implementation compliance |
-| design-orchestrate | `skills/orchestrate.md` | fork | Multi-agent pipeline |
-| design-freshness | `skills/freshness.md` | fork | Freshness research |
+### Step 9: AI Implementation
 
-## Agent
+#### `/design run {prp}`
+AI implements code to pass test suite.
+- Iterates until all tests pass
+- Uses test feedback as oracle
 
-This skill is used by **Architect (Atlas)** and **Engineer (Dev)**.
+### Step 10: Learning
+
+Retrospective → Extract learnings → Propose invariants → System improves
+
+## Multi-Agent Architecture (v2.2)
+
+Design Ops v2.2 runs specialized agents in parallel during compilation:
+
+| Agent | Role | Runs During |
+|-------|------|-------------|
+| **spec-analyst** | Completeness & complexity analysis | stress-test |
+| **validator** | Invariant enforcement (1-43) | validate |
+| **CONVENTIONS-checker** | Codebase pattern alignment | check |
+| **prp-generator** | Spec → PRP transformation | prp |
+| **reviewer** | Quality gate enforcement | check |
+| **ralph-checker** | PRP schema compliance | ralph-check |
+
+Each agent has specific expertise. Parallel execution is automatic.
 
 ## Key Files
 
 ```
-DesignOps/
-├── SKILL.md                 # This file (skill registration)
-├── design.md                # Main skill with full workflows
-├── system-invariants.md     # Validation rules
-├── skills/                  # Forked sub-skills
-│   ├── validate.md
-│   ├── review.md
-│   ├── orchestrate.md
-│   └── freshness.md
-├── templates/               # PRP and spec templates
-├── examples/                # Pattern library
-├── tools/                   # Automation scripts
-│   └── freshness/           # Freshness system
-├── docs/                    # Documentation
-│   └── freshness/           # Freshness artifacts
-└── config/                  # Configuration
-    └── source-registry.yaml # Freshness sources
+design-ops/
+├── SKILL.md                 # This file (command reference)
+├── design.md                # Full skill definition (v2.2)
+├── README.md                # Overview & architecture
+├── system-invariants.md     # Invariants 1-11
+├── domains/                 # Domain-specific invariants (12-43)
+│   ├── consumer-product.md
+│   ├── physical-construction.md
+│   ├── data-architecture.md
+│   ├── integration.md
+│   ├── remote-management.md
+│   └── skill-gap-transcendence.md
+├── enforcement/
+│   ├── design-ops-v3.sh     # Main orchestrator
+│   ├── validator.sh
+│   ├── stress-test.sh
+│   └── ... (all 11 steps)
+├── templates/               # PRP & spec templates
+├── examples/                # Complete working examples
+└── tools/                   # Automation & utilities
 ```
 
-## Invocation Examples
+## Typical Usage
 
-**Shared context:**
-- "Create a PRP for the new authentication system"
-- "Write an implementation spec for the API refactor"
-- "/design init checkout-feature"
-
-**Forked context:**
-- "/design-validate specs/feature.md"
-- "/design-review specs/api.md ./src/api/"
-- "/design-orchestrate specs/migration.md --domain data"
-- "/design-freshness full"
+```bash
+# Journey → Spec → Validate → PRP → Tests → Implement
+/design spec journeys/user-flow.md
+/design stress-test specs/feature.md
+/design validate specs/feature.md
+/design prp specs/feature.md
+/design check PRPs/feature.md
+/design implement PRPs/feature.md
+# ... steps 6-10 ...
+```
 
 ---
 
-*Skill version: 2.1*
-*Context architecture: Shared + Forked (Claude Code 2.1.0+)*
+**Version**: 2.2 (Production Gold Standard)
+**Requirement**: Claude Code 2.1.0+
+**Last updated**: 2026-01-26
