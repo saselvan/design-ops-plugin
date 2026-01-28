@@ -1,6 +1,16 @@
 # Design-Ops Installation Guide
 
-Quick setup guide for using the design-ops orchestrator on your personal laptop with Claude Code.
+Quick setup guide for using design-ops on your personal laptop with Claude Code.
+
+---
+
+## 🚀 Want Automated Spec-to-Production?
+
+**👉 See [QUICKSTART-RALPH.md](QUICKSTART-RALPH.md) for the 5-minute guide to run the full RALPH Pipeline.**
+
+RALPH automates all 12 gates from validated spec to production-ready code. No manual intervention.
+
+---
 
 ## Prerequisites
 

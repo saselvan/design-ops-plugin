@@ -6,22 +6,50 @@ The production gold standard for AI-assisted system design. Transforms human int
 
 ---
 
-## 🚀 Quick Start
+## 🚀 RALPH Pipeline - Spec to Production in Minutes
 
-**New to design-ops?** See **[INSTALLATION.md](INSTALLATION.md)** for the 5-minute setup guide.
+**Want to go from a validated spec to production-ready code automatically?**
 
-**Three ways to use design-ops:**
+👉 **[QUICKSTART-RALPH.md](QUICKSTART-RALPH.md)** - 5-minute guide to run the full pipeline
 
-1. **RALPH Pipeline** (automated spec-to-production) - 12-gate automated pipeline
+```bash
+# Install
+git clone https://github.com/saselvan/design-ops-plugin ~/.claude/design-ops
+chmod +x ~/.claude/design-ops/enforcement/*.py
+
+# Run on your spec
+cd ~/projects/my-app
+python ~/.claude/design-ops/enforcement/ralph-orchestrator.py specs/feature.md
+
+# Load in Claude Code and watch it run
+# Result: Production-ready code in 12 automated gates
+```
+
+**What RALPH Does:**
+- ✅ Generates 30-40 unit tests from your spec
+- ✅ Implements code using TDD (RED → GREEN → REFACTOR)
+- ✅ Runs security scans (OWASP Top 10)
+- ✅ Validates accessibility (WCAG 2.1 AA)
+- ✅ Tests performance (Lighthouse audit)
+- ✅ Runs E2E smoke tests
+- ✅ AI code review for quality/security
+
+**12 Gates:** STRESS_TEST → VALIDATE → GENERATE_PRP → CHECK_PRP → GENERATE_TESTS → TEST_VALIDATION → PREFLIGHT → IMPLEMENT_TDD → PARALLEL_CHECKS → VISUAL_REGRESSION → SMOKE_TEST → AI_CODE_REVIEW
+
+---
+
+## Three Ways to Use Design-Ops
+
+1. **RALPH Pipeline** (RECOMMENDED) - Automated spec-to-production
+   - 📖 **[QUICKSTART-RALPH.md](QUICKSTART-RALPH.md)** - Start here!
    - 📖 [ralph.md](ralph.md) - Skill documentation
    - 📖 [enforcement/RALPH-2026-SUMMARY.md](enforcement/RALPH-2026-SUMMARY.md) - Complete reference
-   - **NEW**: Fully automated from validated spec to production-ready code
 
-2. **Orchestrator** (standalone CLI) - Run validation loops with Claude Code
+2. **Orchestrator** (Manual mode) - Run individual gates with retries
    - 📖 [INSTALLATION.md](INSTALLATION.md) - Installation & usage
    - 📖 [enforcement/ORCHESTRATORS.md](enforcement/ORCHESTRATORS.md) - Full documentation
 
-3. **Skill** (integrated with Claude Code) - Use `/design` commands
+3. **Skill** (Ad-hoc validation) - Use `/design` commands in Claude Code
    - See installation below
 
 ---
