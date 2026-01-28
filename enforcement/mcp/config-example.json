@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "design-ops": {
+      "command": "python3",
+      "args": [
+        "/Users/samuel.selvan/.claude/design-ops/enforcement/mcp/design-ops-server.py"
+      ],
+      "description": "Design-Ops validation rules and invariants server"
+    }
+  }
+}
