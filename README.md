@@ -10,13 +10,18 @@ The production gold standard for AI-assisted system design. Transforms human int
 
 **New to design-ops?** See **[INSTALLATION.md](INSTALLATION.md)** for the 5-minute setup guide.
 
-**Two ways to use design-ops:**
+**Three ways to use design-ops:**
 
-1. **Orchestrator** (standalone CLI) - Run validation loops with Claude Code
+1. **RALPH Pipeline** (automated spec-to-production) - 12-gate automated pipeline
+   - 📖 [ralph.md](ralph.md) - Skill documentation
+   - 📖 [enforcement/RALPH-2026-SUMMARY.md](enforcement/RALPH-2026-SUMMARY.md) - Complete reference
+   - **NEW**: Fully automated from validated spec to production-ready code
+
+2. **Orchestrator** (standalone CLI) - Run validation loops with Claude Code
    - 📖 [INSTALLATION.md](INSTALLATION.md) - Installation & usage
    - 📖 [enforcement/ORCHESTRATORS.md](enforcement/ORCHESTRATORS.md) - Full documentation
 
-2. **Skill** (integrated with Claude Code) - Use `/design` commands
+3. **Skill** (integrated with Claude Code) - Use `/design` commands
    - See installation below
 
 ---
@@ -83,6 +88,67 @@ Design Ops is a comprehensive methodology for designing and implementing softwar
 3. **Emotionally-aware**: Captures user emotional arcs, not just functional flows
 4. **AI-optimized**: Generates AI-executable PRPs from validated specs
 5. **Learning-enabled**: Retrospectives improve the system over time
+
+---
+
+## RALPH Pipeline: Automated Spec-to-Production
+
+**RALPH** = **R**igor **A**t **L**aunch **P**hase **H**andoff
+
+The RALPH Pipeline is Design-Ops' **automated implementation system** that takes a validated spec through to production-ready code via 12 automated gates:
+
+```
+Validated Spec → RALPH (12 Gates) → Production-Ready Code
+```
+
+### What RALPH Does
+
+1. **Generates tests automatically** from your PRP (30-40 unit tests)
+2. **Implements code** using TDD (RED → GREEN → REFACTOR)
+3. **Runs automated checks** (build, lint, integration, accessibility)
+4. **Validates security** (SQL injection, XSS, CSRF scanning)
+5. **Tests performance** (Lighthouse audit, bundle size)
+6. **Verifies visuals** (screenshot regression testing)
+7. **Runs E2E tests** (smoke tests for critical paths)
+8. **AI code review** (LLM-based quality audit)
+
+### The 12 Gates
+
+| Gate | What It Validates | Output |
+|------|-------------------|--------|
+| **1. STRESS_TEST** | Spec completeness | Validated spec |
+| **2. VALIDATE + SECURITY_SCAN** | 43 invariants + security | Secure spec |
+| **3. GENERATE_PRP** | Extract requirements | PRP file |
+| **4. CHECK_PRP** | PRP structure | Validated PRP |
+| **5. GENERATE_TESTS** | Test generation | Test suite |
+| **5.5. TEST_VALIDATION** | Test quality | Quality tests |
+| **5.75. PREFLIGHT** | Environment ready | Ready environment |
+| **6. IMPLEMENT_TDD** | Code to pass tests | Working code |
+| **6.5. PARALLEL_CHECKS** | Build/Lint/Integration/A11y | Quality code |
+| **6.9. VISUAL_REGRESSION** | Screenshot testing | UI validated |
+| **7. SMOKE_TEST** | E2E critical paths | Tested system |
+| **8. AI_CODE_REVIEW** | Security/quality/performance | Production ready |
+
+### How It Works
+
+```bash
+# 1. Generate all tasks from your spec
+python ~/.claude/design-ops/enforcement/ralph-orchestrator.py specs/feature.md
+
+# 2. In Claude Code, load and execute
+# "Load the RALPH tasks and create them"
+
+# 3. Monitor progress
+/tasks
+
+# Result: Production-ready code with full audit trail
+```
+
+Each gate is **stateless** (sees only latest committed files + last errors) and follows an **ASSESS → FIX → COMMIT → VALIDATE** loop until it passes.
+
+Tasks auto-execute as dependencies complete. No manual intervention required.
+
+**See [ralph.md](ralph.md) for complete documentation.**
 
 ---
 

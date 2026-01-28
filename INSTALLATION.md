@@ -159,6 +159,64 @@ design-ops run-gate validate specs/feature.md
 design-ops run-pipeline requirements/phase2/
 ```
 
+## Using RALPH Pipeline (Recommended)
+
+**RALPH** = Automated spec-to-production pipeline (12 gates)
+
+### Quick Start
+
+```bash
+# 1. Navigate to your project
+cd ~/projects/my-app
+
+# 2. Generate RALPH tasks from your validated spec
+python ~/.claude/design-ops/enforcement/ralph-orchestrator.py specs/feature.md
+
+# This creates .ralph/tasks.json with all 12 gates
+
+# 3. In Claude Code session, say:
+# "Load the RALPH tasks and create them"
+
+# 4. Monitor progress
+# /tasks
+```
+
+### What Happens
+
+1. **Task Generation**: Creates 12 gates as Claude Code tasks with dependencies
+2. **Auto-Execution**: Tasks auto-run as dependencies complete
+3. **Stateless Loops**: Each gate sees only latest files + last errors
+4. **Git Commits**: Every successful fix is committed
+5. **Telemetry**: Metrics written to `.ralph/metrics/`
+6. **Production Ready**: All gates pass = deployable code
+
+### The 12 Gates
+
+```
+1. STRESS_TEST → 2. VALIDATE + SECURITY_SCAN → 3. GENERATE_PRP →
+4. CHECK_PRP → 5. GENERATE_TESTS → 5.5. TEST_VALIDATION →
+5.75. PREFLIGHT → 6. IMPLEMENT_TDD → 6.5. PARALLEL_CHECKS →
+6.9. VISUAL_REGRESSION → 7. SMOKE_TEST → 8. AI_CODE_REVIEW
+```
+
+Each gate runs ASSESS → FIX → COMMIT → VALIDATE loop until pass.
+
+**See [ralph.md](ralph.md) for complete documentation.**
+
+## Using Individual Gates (Manual Mode)
+
+If you want to run gates manually instead of using RALPH:
+
+```bash
+# Run validation
+python ~/.claude/design-ops/enforcement/claude-code-orchestrator.py run-gate validate specs/feature.md
+
+# Run full pipeline manually
+python ~/.claude/design-ops/enforcement/claude-code-orchestrator.py run-pipeline requirements/phase2/
+```
+
+**Note**: RALPH is recommended over manual mode for most users.
+
 ## Documentation
 
 Once installed, read the full documentation:
@@ -166,6 +224,12 @@ Once installed, read the full documentation:
 ```bash
 # Main README
 cat ~/.claude/design-ops/README.md
+
+# RALPH Pipeline (RECOMMENDED)
+cat ~/.claude/design-ops/ralph.md
+
+# RALPH Complete Reference
+cat ~/.claude/design-ops/enforcement/RALPH-2026-SUMMARY.md
 
 # Orchestrator comparison (Cursor vs Claude Code)
 cat ~/.claude/design-ops/enforcement/ORCHESTRATORS.md
