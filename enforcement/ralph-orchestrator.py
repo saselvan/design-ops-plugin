@@ -275,13 +275,18 @@ Write to `.ralph/metrics/gate-3.json` on completion.
 
 **3. IF FAIL:**
 
-**3a. READ INSTRUCTION:**
-```bash
-cat {prp_file}.check-instruction.md
-```
+**3a. READ VALIDATION ERRORS:**
+The `check` command outputs structural validation errors to console.
+Review the error output above (NO instruction file is generated).
+
+Common PRP structure issues:
+- Missing required sections (Goal, Context, Requirements, etc.)
+- Incomplete requirement definitions
+- Missing acceptance criteria
+- Ambiguous technical constraints
 
 **3b. FIX:**
-Edit PRP to fix structure issues.
+Edit PRP to fix ALL structure issues shown in validation output.
 
 **3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
 ```bash
