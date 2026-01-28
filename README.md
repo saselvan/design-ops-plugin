@@ -6,7 +6,22 @@ The production gold standard for AI-assisted system design. Transforms human int
 
 ---
 
-## Installation
+## 🚀 Quick Start
+
+**New to design-ops?** See **[INSTALLATION.md](INSTALLATION.md)** for the 5-minute setup guide.
+
+**Two ways to use design-ops:**
+
+1. **Orchestrator** (standalone CLI) - Run validation loops with Claude Code
+   - 📖 [INSTALLATION.md](INSTALLATION.md) - Installation & usage
+   - 📖 [enforcement/ORCHESTRATORS.md](enforcement/ORCHESTRATORS.md) - Full documentation
+
+2. **Skill** (integrated with Claude Code) - Use `/design` commands
+   - See installation below
+
+---
+
+## Installation (Skill Mode)
 
 ### 1. Clone the repository
 
