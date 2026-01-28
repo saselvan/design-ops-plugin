@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-RALPH Orchestrator for Claude Code
+RALPH Orchestrator for Claude Code v2
 
-Generates all 12 RALPH gates as Claude Code tasks with proper dependencies.
-Each task is stateless and runs ASSESS → FIX → COMMIT → VALIDATE loop.
+CRITICAL CHANGE: Git commits are now MANDATORY and EXPLICIT in every gate.
+Each task description now emphasizes commits are BLOCKING requirements.
 
 Usage:
-    python ralph-orchestrator.py <spec-file>
-
-Example:
-    python ralph-orchestrator.py specs/S-001-feature.md
+    python ralph-orchestrator-v2.py <spec-file>
 """
 
 import sys
@@ -18,7 +15,7 @@ from pathlib import Path
 import json
 
 def generate_tasks(spec_file):
-    """Generate all 12 RALPH gates as task definitions."""
+    """Generate all 12 RALPH gates as task definitions with MANDATORY git commits."""
 
     spec_path = Path(spec_file).resolve()
     if not spec_path.exists():
@@ -44,7 +41,6 @@ def generate_tasks(spec_file):
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed spec file: {spec_path}
 - Errors from last stress-test run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Command:
@@ -52,24 +48,51 @@ def generate_tasks(spec_file):
 {design_ops_script} stress-test {spec_path}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run stress-test command above.
+**1. ASSESS:**
+```bash
+{design_ops_script} stress-test {spec_path}
+```
 
-**IF PASS:**
-Mark task complete and unblock next gate.
+**2. IF PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction file: {spec_path}.stress-test-instruction.md
-2. **FIX:** Edit spec to address ALL gaps (missing context, scope, constraints, risks, acceptance criteria, edge cases)
-3. **COMMIT:**
-   ```bash
-   git add {spec_path}
-   git commit -m "ralph: GATE 1 - fix completeness gaps"
-   ```
-4. **VALIDATE:** Re-run stress-test
-5. **LOOP:** Repeat until PASS
+**3. IF FAIL:**
+
+**3a. READ INSTRUCTION:**
+```bash
+cat {spec_path}.stress-test-instruction.md
+```
+
+**3b. FIX:**
+Edit spec to address ALL gaps listed in instruction.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {spec_path}
+git commit -m "ralph: GATE 1 - fix completeness gaps"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Next gate sees ONLY committed files
+- Without commit, fixes are lost
+- Audit trail requires commits
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+# Should show: "ralph: GATE 1 - fix completeness gaps"
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} stress-test {spec_path}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-1.json` on completion.
@@ -88,7 +111,6 @@ Write to `.ralph/metrics/gate-1.json` on completion.
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed spec file: {spec_path}
 - Errors from last validate run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Commands:
@@ -97,26 +119,54 @@ Write to `.ralph/metrics/gate-1.json` on completion.
 {design_ops_script} security-scan {spec_path}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run both commands above.
+**1. ASSESS:**
+```bash
+{design_ops_script} validate {spec_path}
+{design_ops_script} security-scan {spec_path}
+```
 
-**IF PASS:**
-Mark task complete and unblock next gate.
+**2. IF BOTH PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction files:
-   - {spec_path}.validate-instruction.md (43 invariants)
-   - {spec_path}.security-instruction.md (security issues)
-2. **FIX:** Edit spec to fix violations (ambiguity, missing error states, security gaps)
-3. **COMMIT:**
-   ```bash
-   git add {spec_path}
-   git commit -m "ralph: GATE 2 - fix invariant violations and security issues"
-   ```
-4. **VALIDATE:** Re-run both commands
-5. **LOOP:** Repeat until PASS
+**3. IF EITHER FAILS:**
+
+**3a. READ INSTRUCTIONS:**
+```bash
+cat {spec_path}.validate-instruction.md
+cat {spec_path}.security-instruction.md
+```
+
+**3b. FIX:**
+Edit spec to fix ALL violations (43 invariants + security issues).
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {spec_path}
+git commit -m "ralph: GATE 2 - fix invariant violations and security issues"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Stateless gates require commits between iterations
+- PRP generation (Gate 3) reads from git HEAD
+- Without commit, changes invisible to next gate
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+# Should show: "ralph: GATE 2 - fix invariant violations and security issues"
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} validate {spec_path}
+{design_ops_script} security-scan {spec_path}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-2.json` on completion.
@@ -134,8 +184,6 @@ Write to `.ralph/metrics/gate-2.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed spec file: {spec_path}
-- Errors from last generate run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Command:
@@ -143,24 +191,50 @@ Write to `.ralph/metrics/gate-2.json` on completion.
 {design_ops_script} generate {spec_path}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run generate command above.
+**1. ASSESS:**
+```bash
+{design_ops_script} generate {spec_path}
+```
 
-**IF PASS:**
-PRP generated at {prp_file}. Mark task complete and unblock next gate.
+**2. IF PASS:**
+✅ PRP generated at {prp_file}
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction file: {spec_path}.generate-instruction.md
-2. **FIX:** Edit spec to address extraction issues (missing sections, unclear requirements)
-3. **COMMIT:**
-   ```bash
-   git add {spec_path}
-   git commit -m "ralph: GATE 3 - fix PRP extraction issues"
-   ```
-4. **VALIDATE:** Re-run generate
-5. **LOOP:** Repeat until PASS
+**3. IF FAIL:**
+
+**3a. READ INSTRUCTION:**
+```bash
+cat {spec_path}.generate-instruction.md
+```
+
+**3b. FIX:**
+Edit spec to address extraction issues.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {spec_path}
+git commit -m "ralph: GATE 3 - fix PRP extraction issues"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 4 (CHECK_PRP) reads PRP from committed state
+- Without commit, PRP validation fails
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} generate {spec_path}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Output:**
 PRP file created at: {prp_file}
@@ -181,8 +255,6 @@ Write to `.ralph/metrics/gate-3.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed PRP file: {prp_file}
-- Errors from last check run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Command:
@@ -190,24 +262,49 @@ Write to `.ralph/metrics/gate-3.json` on completion.
 {design_ops_script} check {prp_file}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run check command above.
+**1. ASSESS:**
+```bash
+{design_ops_script} check {prp_file}
+```
 
-**IF PASS:**
-Mark task complete and unblock next gate.
+**2. IF PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction file: {prp_file}.check-instruction.md
-2. **FIX:** Edit PRP to fix structure issues (missing sections, incomplete context, ambiguous requirements)
-3. **COMMIT:**
-   ```bash
-   git add {prp_file}
-   git commit -m "ralph: GATE 4 - fix PRP structure"
-   ```
-4. **VALIDATE:** Re-run check
-5. **LOOP:** Repeat until PASS
+**3. IF FAIL:**
+
+**3a. READ INSTRUCTION:**
+```bash
+cat {prp_file}.check-instruction.md
+```
+
+**3b. FIX:**
+Edit PRP to fix structure issues.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {prp_file}
+git commit -m "ralph: GATE 4 - fix PRP structure"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 5 (GENERATE_TESTS) reads PRP from committed state
+- Test generation depends on clean PRP
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} check {prp_file}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-4.json` on completion.
@@ -225,8 +322,6 @@ Write to `.ralph/metrics/gate-4.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed PRP file: {prp_file}
-- Errors from last test generation run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Command:
@@ -234,28 +329,55 @@ Write to `.ralph/metrics/gate-4.json` on completion.
 {design_ops_script} generate-tests {prp_file}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run generate-tests command above.
+**1. ASSESS:**
+```bash
+{design_ops_script} generate-tests {prp_file}
+```
 
-**IF PASS:**
-Tests generated in {test_dir}/. Mark task complete and unblock next gate.
+**2. IF PASS:**
+✅ Tests generated in {test_dir}/
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction file: {prp_file}.generate-tests-instruction.md
-2. **FIX:** Generate 30-40 unit tests covering:
-   - Happy paths
-   - Error paths
-   - Edge cases
-   - Boundary conditions
-3. **COMMIT:**
-   ```bash
-   git add {test_dir}/
-   git commit -m "ralph: GATE 5 - generate test suite"
-   ```
-4. **VALIDATE:** Re-run generate-tests
-5. **LOOP:** Repeat until PASS
+**3. IF FAIL:**
+
+**3a. READ INSTRUCTION:**
+```bash
+cat {prp_file}.generate-tests-instruction.md
+```
+
+**3b. FIX:**
+Generate 30-40 unit tests covering:
+- Happy paths
+- Error paths
+- Edge cases
+- Boundary conditions
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {test_dir}/
+git commit -m "ralph: GATE 5 - generate test suite"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 5.5 (TEST_VALIDATION) reads tests from committed state
+- Gate 6 (IMPLEMENT_TDD) depends on committed tests
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+git status  # Should be clean
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} generate-tests {prp_file}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Output:**
 Test files in: {test_dir}/
@@ -276,8 +398,6 @@ Write to `.ralph/metrics/gate-5.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed test files: {test_dir}/
-- Errors from last validation run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Commands:
@@ -286,30 +406,58 @@ Write to `.ralph/metrics/gate-5.json` on completion.
 {design_ops_script} test-quality {test_dir}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run both commands above. Check:
-- All tests fail initially (RED state - correct behavior before implementation)
-- No weak assertions (assertTrue(true), empty tests)
-- Proper test structure (AAA pattern: Arrange, Act, Assert)
+**1. ASSESS:**
+```bash
+{design_ops_script} test-validate {test_dir}
+{design_ops_script} test-quality {test_dir}
+```
+
+Check:
+- All tests fail initially (RED state)
+- No weak assertions
+- Proper AAA structure
 - Edge cases covered
 
-**IF PASS:**
-Mark task complete and unblock next gate.
+**2. IF BOTH PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction files:
-   - {test_dir}.test-validate-instruction.md
-   - {test_dir}.test-quality-instruction.md
-2. **FIX:** Edit tests to fix issues (weak assertions, missing edge cases, incorrect structure)
-3. **COMMIT:**
-   ```bash
-   git add {test_dir}/
-   git commit -m "ralph: GATE 5.5 - fix test suite quality"
-   ```
-4. **VALIDATE:** Re-run both commands
-5. **LOOP:** Repeat until PASS
+**3. IF EITHER FAILS:**
+
+**3a. READ INSTRUCTIONS:**
+```bash
+cat {test_dir}.test-validate-instruction.md
+cat {test_dir}.test-quality-instruction.md
+```
+
+**3b. FIX:**
+Edit tests to fix issues.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {test_dir}/
+git commit -m "ralph: GATE 5.5 - fix test suite quality"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 6 (IMPLEMENT_TDD) reads tests from committed state
+- TDD loop depends on clean, failing tests
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} test-validate {test_dir}
+{design_ops_script} test-quality {test_dir}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-5.5.json` on completion.
@@ -327,8 +475,6 @@ Write to `.ralph/metrics/gate-5.5.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed project files
-- Errors from last preflight run
-- Recommended fixes from last assessment
 - NO full conversation history
 
 ### Command:
@@ -336,28 +482,55 @@ Write to `.ralph/metrics/gate-5.5.json` on completion.
 {design_ops_script} preflight {code_dir.parent}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run preflight command above. Check:
-- Dependencies installed (package.json/requirements.txt)
+**1. ASSESS:**
+```bash
+{design_ops_script} preflight {code_dir.parent}
+```
+
+Check:
+- Dependencies installed
 - Build system working
 - Test runner configured
 - Environment variables set
 
-**IF PASS:**
-Mark task complete and unblock next gate.
+**2. IF PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction file: {code_dir.parent}/preflight-instruction.md
-2. **FIX:** Fix environment issues (missing deps, broken build, test runner config)
-3. **COMMIT:**
-   ```bash
-   git add .
-   git commit -m "ralph: GATE 5.75 - fix environment setup"
-   ```
-4. **VALIDATE:** Re-run preflight
-5. **LOOP:** Repeat until PASS
+**3. IF FAIL:**
+
+**3a. READ INSTRUCTION:**
+```bash
+cat {code_dir.parent}/preflight-instruction.md
+```
+
+**3b. FIX:**
+Fix environment issues.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add .
+git commit -m "ralph: GATE 5.75 - fix environment setup"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 6 (IMPLEMENT_TDD) depends on working environment
+- Package.json / requirements.txt must be committed
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} preflight {code_dir.parent}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-5.75.json` on completion.
@@ -383,37 +556,56 @@ Write to `.ralph/metrics/gate-5.75.json` on completion.
 
 **For each failing test:**
 
-1. **RED:** Confirm test fails with expected error
-2. **GREEN:** Write MINIMAL code to make it pass
-3. **REFACTOR:** Clean up if needed
-4. **COMMIT:**
-   ```bash
-   git add {code_dir}/ {test_dir}/
-   git commit -m "ralph: GATE 6 - pass test: [test_name]"
-   ```
+**1. RED:** Confirm test fails
+**2. GREEN:** Write MINIMAL code to pass
+**3. REFACTOR:** Clean up if needed
+**4. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {code_dir}/ {test_dir}/
+git commit -m "ralph: GATE 6 - pass test: [test_name]"
+```
+
+**WHY COMMIT AFTER EACH TEST:**
+- Stateless gates require granular commits
+- Each commit is ONE test passing
+- Audit trail shows TDD progression
 
 ### Overall Loop:
 
-**ASSESS:**
-Run tests:
+**1. ASSESS:**
 ```bash
 cd {code_dir.parent} && pytest {test_dir}/
 ```
 
-**IF ALL PASS:**
-Mark task complete and unblock next gate.
+**2. IF ALL TESTS PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF ANY FAIL:**
-1. Pick ONE failing test
-2. Run TDD micro-loop above
-3. **VALIDATE:** Re-run all tests
-4. **LOOP:** Repeat until all tests pass
+**3. IF ANY FAIL:**
+
+**3a. Pick ONE failing test**
+
+**3b. Run TDD micro-loop (above) for that ONE test**
+
+**3c. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+# Should show: "ralph: GATE 6 - pass test: [specific_test_name]"
+```
+
+**3d. RE-RUN ALL TESTS:**
+```bash
+pytest {test_dir}/
+```
+
+**3e. LOOP:**
+If more tests failing, go back to step 3a.
 
 **Critical Rules:**
-- ONE test at a time
-- MINIMAL code to pass
-- Commit after each test passes
-- NO speculative features
+- 🚨 ONE test at a time
+- 🚨 COMMIT after EACH test passes
+- 🚨 MINIMAL code only
+- 🚨 NO speculative features
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-6.json` on completion.
@@ -431,42 +623,62 @@ Write to `.ralph/metrics/gate-6.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
-- Errors from last parallel checks run
 - NO full conversation history
 
-### Commands (run in parallel):
+### Command:
 ```bash
 {design_ops_script} parallel-checks {code_dir.parent}
 ```
 
-This runs:
-1. **Build validation** - Clean build succeeds
-2. **Linting** - ESLint/Pylint passes
-3. **Integration tests** - API/component integration passes
-4. **A11y checks** - Accessibility standards met (WCAG 2.1 AA)
+Runs in parallel:
+1. Build validation
+2. Linting
+3. Integration tests
+4. A11y checks
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run parallel-checks command above.
+**1. ASSESS:**
+```bash
+{design_ops_script} parallel-checks {code_dir.parent}
+```
 
-**IF PASS:**
-Mark task complete and unblock next gate.
+**2. IF ALL PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read instruction file: {code_dir.parent}/parallel-checks-instruction.md
-2. **FIX:** Address failures:
-   - Build errors → fix imports/config
-   - Lint errors → fix code style
-   - Integration failures → fix API contracts
-   - A11y issues → add ARIA labels, alt text, keyboard nav
-3. **COMMIT:**
-   ```bash
-   git add {code_dir}/
-   git commit -m "ralph: GATE 6.5 - fix parallel check failures"
-   ```
-4. **VALIDATE:** Re-run parallel-checks
-5. **LOOP:** Repeat until PASS
+**3. IF ANY FAIL:**
+
+**3a. READ INSTRUCTION:**
+```bash
+cat {code_dir.parent}/parallel-checks-instruction.md
+```
+
+**3b. FIX:**
+Address all failures.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {code_dir}/
+git commit -m "ralph: GATE 6.5 - fix parallel check failures"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 6.9 (VISUAL_REGRESSION) reads from committed state
+- Clean build required for visual tests
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} parallel-checks {code_dir.parent}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-6.5.json` on completion.
@@ -485,8 +697,6 @@ Write to `.ralph/metrics/gate-6.5.json` on completion.
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
 - Baseline screenshots
-- Current screenshots
-- Diff report
 - NO full conversation history
 
 ### Command:
@@ -494,32 +704,57 @@ Write to `.ralph/metrics/gate-6.5.json` on completion.
 {design_ops_script} visual-regression {code_dir.parent}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run visual-regression command above. Compare current vs baseline screenshots.
+**1. ASSESS:**
+```bash
+{design_ops_script} visual-regression {code_dir.parent}
+```
 
-**IF PASS:**
-No unexpected visual changes. Mark task complete and unblock next gate.
+**2. IF PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read diff report: {code_dir.parent}/.ralph/visual-regression-report.html
-2. **DETERMINE:**
-   - Expected change? Update baseline screenshots
-   - Regression? Fix the code
-3. **FIX OR APPROVE:**
-   - Fix code if regression
-   - Update baseline if intended change:
-     ```bash
-     {design_ops_script} visual-regression-approve {code_dir.parent}
-     ```
-4. **COMMIT:**
-   ```bash
-   git add {code_dir}/ .ralph/visual-baselines/
-   git commit -m "ralph: GATE 6.9 - fix visual regression OR approve new baseline"
-   ```
-5. **VALIDATE:** Re-run visual-regression
-6. **LOOP:** Repeat until PASS
+**3. IF FAIL:**
+
+**3a. READ DIFF REPORT:**
+```bash
+open {code_dir.parent}/.ralph/visual-regression-report.html
+```
+
+**3b. DETERMINE:**
+- Expected change? Approve baseline
+- Regression? Fix code
+
+**3c. FIX OR APPROVE:**
+If regression: Fix code
+If intended: Approve baseline:
+```bash
+{design_ops_script} visual-regression-approve {code_dir.parent}
+```
+
+**3d. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {code_dir}/ .ralph/visual-baselines/
+git commit -m "ralph: GATE 6.9 - fix visual regression OR approve new baseline"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 7 (SMOKE_TEST) reads from committed state
+- Baseline screenshots must be versioned
+
+**3e. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3f. RE-VALIDATE:**
+```bash
+{design_ops_script} visual-regression {code_dir.parent}
+```
+
+**3g. LOOP:**
+If still failing, go back to step 3a.
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-6.9.json` on completion.
@@ -538,7 +773,6 @@ Write to `.ralph/metrics/gate-6.9.json` on completion.
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
 - Latest committed E2E tests
-- Test failures
 - NO full conversation history
 
 ### Command:
@@ -546,28 +780,49 @@ Write to `.ralph/metrics/gate-6.9.json` on completion.
 {design_ops_script} smoke-test {code_dir.parent}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run smoke-test command above. Test critical user paths end-to-end.
+**1. ASSESS:**
+```bash
+{design_ops_script} smoke-test {code_dir.parent}
+```
 
-**IF PASS:**
-All critical paths working. Mark task complete and unblock next gate.
+**2. IF ALL PASS:**
+✅ Mark task complete and unblock next gate.
+✅ Done.
 
-**IF FAIL:**
-1. Read failure report: {code_dir.parent}/.ralph/smoke-test-report.html
-2. **FIX:** Address E2E failures:
-   - UI not rendering? Fix component
-   - API not responding? Fix backend
-   - Data not persisting? Fix database layer
-   - Navigation broken? Fix routing
-3. **COMMIT:**
-   ```bash
-   git add {code_dir}/
-   git commit -m "ralph: GATE 7 - fix smoke test failures"
-   ```
-4. **VALIDATE:** Re-run smoke-test
-5. **LOOP:** Repeat until PASS
+**3. IF ANY FAIL:**
+
+**3a. READ REPORT:**
+```bash
+cat {code_dir.parent}/.ralph/smoke-test-report.html
+```
+
+**3b. FIX:**
+Address E2E failures.
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {code_dir}/
+git commit -m "ralph: GATE 7 - fix smoke test failures"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Gate 8 (AI_CODE_REVIEW) reads from committed state
+- Final review requires working system
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} smoke-test {code_dir.parent}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Critical Paths Tested:**
 - User login/auth
@@ -591,8 +846,6 @@ Write to `.ralph/metrics/gate-7.json` on completion.
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
-- Review report
-- Performance metrics
 - NO full conversation history
 
 ### Commands:
@@ -601,42 +854,76 @@ Write to `.ralph/metrics/gate-7.json` on completion.
 {design_ops_script} performance-audit {code_dir.parent}
 ```
 
-### Loop:
+### MANDATORY Loop (DO NOT SKIP ANY STEP):
 
-**ASSESS:**
-Run both commands above. LLM reviews code for:
-- **Security** - SQL injection, XSS, CSRF, auth bypasses
-- **Quality** - Code smells, duplicate logic, complexity
-- **Performance** - Lighthouse audit, bundle size, load times
+**1. ASSESS:**
+```bash
+{design_ops_script} ai-review {code_dir.parent}
+{design_ops_script} performance-audit {code_dir.parent}
+```
 
-**IF PASS:**
-No critical issues. Mark task complete. **RALPH PIPELINE COMPLETE!**
+**2. IF BOTH PASS:**
+✅ No critical issues
+✅ Mark task complete
+✅ 🎉 RALPH PIPELINE COMPLETE!
+✅ Done.
 
-**IF FAIL:**
-1. Read reports:
-   - {code_dir.parent}/.ralph/ai-review-report.md
-   - {code_dir.parent}/.ralph/performance-report.json
-2. **FIX:** Address issues:
-   - Security: Fix vulnerabilities immediately (CRITICAL)
-   - Quality: Refactor code smells (HIGH)
-   - Performance: Optimize if < 90 Lighthouse score (MEDIUM)
-3. **COMMIT:**
-   ```bash
-   git add {code_dir}/
-   git commit -m "ralph: GATE 8 - fix security/quality/performance issues"
-   ```
-4. **VALIDATE:** Re-run both commands
-5. **LOOP:** Repeat until PASS
+**3. IF EITHER FAILS:**
+
+**3a. READ REPORTS:**
+```bash
+cat {code_dir.parent}/.ralph/ai-review-report.md
+cat {code_dir.parent}/.ralph/performance-report.json
+```
+
+**3b. FIX:**
+Address issues:
+- Security: CRITICAL (fix immediately)
+- Quality: HIGH (refactor)
+- Performance: MEDIUM (optimize)
+
+**3c. 🚨 MANDATORY GIT COMMIT (DO NOT SKIP):**
+```bash
+git add {code_dir}/
+git commit -m "ralph: GATE 8 - fix security/quality/performance issues"
+```
+
+**WHY COMMIT IS MANDATORY:**
+- Final commit = production-ready state
+- Git tag will mark this commit
+- Deployment reads from this commit
+
+**3d. VERIFY COMMIT:**
+```bash
+git log -1 --oneline
+```
+
+**3e. RE-VALIDATE:**
+```bash
+{design_ops_script} ai-review {code_dir.parent}
+{design_ops_script} performance-audit {code_dir.parent}
+```
+
+**3f. LOOP:**
+If still failing, go back to step 3a.
 
 **Final Output:**
-- Security report
-- Quality score
-- Lighthouse metrics
+- Security report: {code_dir.parent}/.ralph/ai-review-report.md
+- Performance metrics: {code_dir.parent}/.ralph/performance-report.json
 - Production readiness: ✅ or ❌
 
 **Telemetry:**
 Write to `.ralph/metrics/gate-8.json` on completion.
 Write final summary to `.ralph/COMPLETE.md`.
+
+**🎉 CONGRATULATIONS - RALPH PIPELINE COMPLETE!**
+
+All 12 gates passed. Code is production-ready.
+
+Git history shows full audit trail:
+```bash
+git log --oneline --grep="ralph: GATE"
+```
 """,
             "activeForm": "Running GATE 8: AI_CODE_REVIEW + PERFORMANCE_AUDIT",
             "blocks": [],
@@ -649,15 +936,16 @@ Write final summary to `.ralph/COMPLETE.md`.
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python ralph-orchestrator.py <spec-file>")
+        print("Usage: python ralph-orchestrator-v2.py <spec-file>")
         print("\nExample:")
-        print("  python ralph-orchestrator.py specs/S-001-feature.md")
+        print("  python ralph-orchestrator-v2.py specs/S-001-feature.md")
         sys.exit(1)
 
     spec_file = sys.argv[1]
 
     print("=" * 80)
-    print("RALPH ORCHESTRATOR - Task Generation")
+    print("RALPH ORCHESTRATOR V2 - Task Generation")
+    print("🚨 GIT COMMITS NOW MANDATORY AND EXPLICIT")
     print("=" * 80)
     print(f"\nSpec file: {spec_file}")
 
@@ -670,14 +958,18 @@ def main():
     with open(output_file, 'w') as f:
         json.dump(tasks, f, indent=2)
 
-    print(f"\n✅ Generated {len(tasks)} tasks")
+    print(f"\n✅ Generated {len(tasks)} tasks with MANDATORY git commits")
     print(f"📄 Task definitions written to: {output_file}")
+    print("\nKey changes in V2:")
+    print("  🚨 Git commits are now MANDATORY (bold, caps, explicit)")
+    print("  🚨 Each commit has VERIFY step (git log check)")
+    print("  🚨 WHY COMMIT IS MANDATORY section explains reason")
+    print("  🚨 GATE 6: Commit after EACH test (not end of gate)")
     print("\nNext steps:")
     print("1. Review .ralph/tasks.json")
     print("2. In Claude Code, run:")
     print("   python ~/.claude/design-ops/enforcement/ralph-task-loader.py")
-    print("\nThis will create all 12 gates as Claude Code tasks with proper dependencies.")
-    print("Tasks will auto-unblock and spawn agents as dependencies complete.")
+    print("\nTasks will enforce git commits at every fix iteration.")
 
 
 if __name__ == "__main__":
