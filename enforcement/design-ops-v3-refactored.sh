@@ -533,6 +533,676 @@ cmd_ai_review() {
     echo -e "${YELLOW}Next step: Follow the instruction to perform Opus review${NC}"
 }
 
+cmd_security_scan() {
+    local spec_file="$1"
+
+    echo -e "${BLUE}━━━ SECURITY-SCAN ━━━${NC}"
+
+    [[ -f "$spec_file" ]] || {
+        echo -e "${RED}❌ Spec file not found: $spec_file${NC}"
+        exit 1
+    }
+
+    # Security validation checks
+    echo -e "${BLUE}Security checks:${NC}"
+
+    local has_issues=0
+    local issues=""
+
+    # Check for authentication mention
+    if ! grep -qi "auth" "$spec_file"; then
+        issues+="⚠️  No authentication mentioned\n"
+        has_issues=1
+    fi
+
+    # Check for authorization/permissions
+    if ! grep -qi "permiss\|authoriz\|role\|access control" "$spec_file"; then
+        issues+="⚠️  No authorization/permissions documented\n"
+        has_issues=1
+    fi
+
+    # Check for PII handling
+    if grep -qi "user.*data\|personal.*info\|email\|phone\|address" "$spec_file"; then
+        if ! grep -qi "encrypt\|pii\|gdpr\|privacy" "$spec_file"; then
+            issues+="⚠️  PII mentioned but no privacy/encryption handling specified\n"
+            has_issues=1
+        fi
+    fi
+
+    # Check for rate limiting
+    if grep -qi "api\|endpoint\|request" "$spec_file"; then
+        if ! grep -qi "rate.*limit\|throttl" "$spec_file"; then
+            issues+="⚠️  API/endpoints mentioned but no rate limiting specified\n"
+            has_issues=1
+        fi
+    fi
+
+    # Check for input validation
+    if ! grep -qi "validat\|sanitiz\|input.*check" "$spec_file"; then
+        issues+="⚠️  No input validation mentioned\n"
+        has_issues=1
+    fi
+
+    # Check for error handling that might leak info
+    if grep -qi "error" "$spec_file"; then
+        if ! grep -qi "error.*message\|error.*handling" "$spec_file"; then
+            issues+="⚠️  Errors mentioned but no secure error handling specified\n"
+            has_issues=1
+        fi
+    fi
+
+    if [[ $has_issues -eq 1 ]]; then
+        echo -e "${RED}❌ Security scan found issues:${NC}\n"
+        echo -e "$issues"
+
+        # Generate instruction
+        local instruction_file="${spec_file}.security-instruction.md"
+        cat > "$instruction_file" << EOF
+# Security Scan Issues
+
+The following security concerns were identified in the spec:
+
+$issues
+
+## Required Fixes:
+
+1. **Authentication**: Specify authentication method (JWT, OAuth, session-based)
+2. **Authorization**: Define permission model and access control rules
+3. **PII Handling**: If handling personal data, specify:
+   - Encryption (at rest and in transit)
+   - Data retention policies
+   - GDPR/privacy compliance
+4. **Rate Limiting**: Define rate limits for API endpoints
+5. **Input Validation**: Specify validation rules for all user inputs
+6. **Error Handling**: Ensure error messages don't leak sensitive information
+
+## Security Checklist:
+
+- [ ] Authentication method specified
+- [ ] Authorization/permissions documented
+- [ ] PII handling explicit (if applicable)
+- [ ] Rate limiting defined
+- [ ] Input validation rules clear
+- [ ] Error handling secure (no info leakage)
+- [ ] SQL injection prevention (parameterized queries)
+- [ ] XSS prevention (input sanitization)
+- [ ] CSRF protection (tokens)
+EOF
+        echo -e "${YELLOW}Instruction generated: $instruction_file${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}✅ Security scan passed${NC}"
+    fi
+}
+
+cmd_test_validate() {
+    local test_dir="$1"
+
+    echo -e "${BLUE}━━━ TEST-VALIDATE ━━━${NC}"
+
+    [[ -d "$test_dir" ]] || {
+        echo -e "${RED}❌ Test directory not found: $test_dir${NC}"
+        exit 1
+    }
+
+    # Check if tests exist
+    local test_files=$(find "$test_dir" -name "*.test.*" -o -name "test_*.py" -o -name "*_test.go" 2>/dev/null | wc -l)
+
+    if [[ $test_files -eq 0 ]]; then
+        echo -e "${RED}❌ No test files found in $test_dir${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Found $test_files test files${NC}"
+
+    # Run tests and check they fail (RED state)
+    echo -e "${BLUE}Running tests to verify they fail initially...${NC}"
+
+    local test_passed=0
+
+    # Detect test framework
+    if [[ -f "$test_dir/../package.json" ]]; then
+        # JavaScript/TypeScript - npm test
+        (cd "$test_dir/.." && npm test 2>&1) && test_passed=1
+    elif [[ -f "$test_dir/../pytest.ini" ]] || [[ -f "$test_dir/../setup.py" ]]; then
+        # Python - pytest
+        (cd "$test_dir/.." && pytest "$test_dir" 2>&1) && test_passed=1
+    elif [[ -f "$test_dir/../go.mod" ]]; then
+        # Go - go test
+        (cd "$test_dir/.." && go test ./... 2>&1) && test_passed=1
+    else
+        echo -e "${YELLOW}⚠️  Could not detect test framework${NC}"
+        echo -e "${YELLOW}Manually verify tests fail before implementation${NC}"
+        exit 0
+    fi
+
+    if [[ $test_passed -eq 1 ]]; then
+        echo -e "${RED}❌ Tests are PASSING but implementation doesn't exist yet!${NC}"
+        echo -e "${RED}   Tests should fail (RED state) before TDD implementation.${NC}"
+
+        # Generate instruction
+        local instruction_file="${test_dir}.test-validate-instruction.md"
+        cat > "$instruction_file" << EOF
+# Test Validation Failed
+
+## Problem:
+Tests are passing but no implementation exists yet.
+
+## Why This Is Bad:
+In TDD, tests must fail first (RED state) to prove they're testing real behavior.
+If tests pass without implementation, they're either:
+1. Testing nothing (weak assertions)
+2. Testing mocks instead of real code
+3. Missing the actual implementation check
+
+## Required Fix:
+
+Review each test and ensure it:
+1. Actually calls the function being tested
+2. Asserts on real behavior (not just mock calls)
+3. Will fail if implementation is missing
+
+## Example of BAD test:
+\`\`\`javascript
+test('user can login', () => {
+  const mockLogin = jest.fn();
+  mockLogin();
+  expect(mockLogin).toHaveBeenCalled(); // ❌ Always passes
+});
+\`\`\`
+
+## Example of GOOD test:
+\`\`\`javascript
+test('user can login', () => {
+  const result = login('user@example.com', 'password');
+  expect(result.success).toBe(true); // ✅ Fails if login() missing
+});
+\`\`\`
+
+Run tests again after fixing. They should FAIL until implementation is written.
+EOF
+        echo -e "${YELLOW}Instruction generated: $instruction_file${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}✅ Tests fail correctly (RED state confirmed)${NC}"
+        echo -e "${GREEN}   Ready for TDD implementation${NC}"
+    fi
+}
+
+cmd_test_quality() {
+    local test_dir="$1"
+
+    echo -e "${BLUE}━━━ TEST-QUALITY ━━━${NC}"
+
+    [[ -d "$test_dir" ]] || {
+        echo -e "${RED}❌ Test directory not found: $test_dir${NC}"
+        exit 1
+    }
+
+    local has_issues=0
+    local issues=""
+
+    # Find all test files
+    local test_files=$(find "$test_dir" -name "*.test.*" -o -name "test_*.py" -o -name "*_test.go" 2>/dev/null)
+
+    if [[ -z "$test_files" ]]; then
+        echo -e "${RED}❌ No test files found${NC}"
+        exit 1
+    fi
+
+    # Check for weak assertions
+    echo -e "${BLUE}Checking for weak assertions...${NC}"
+
+    if grep -r "toBeTruthy\|toBeDefined\|toExist\|assert True\|assert.*is not None" $test_dir 2>/dev/null | grep -v "node_modules" > /dev/null; then
+        issues+="⚠️  Weak assertions found (toBeTruthy, toBeDefined, assert True)\n"
+        has_issues=1
+    fi
+
+    # Check for empty tests
+    echo -e "${BLUE}Checking for empty/trivial tests...${NC}"
+
+    for file in $test_files; do
+        # Count assertions
+        local assert_count=$(grep -c "expect\|assert" "$file" 2>/dev/null || echo 0)
+        if [[ $assert_count -lt 1 ]]; then
+            issues+="⚠️  Test file has no assertions: $file\n"
+            has_issues=1
+        fi
+    done
+
+    # Check for AAA pattern (basic heuristic)
+    echo -e "${BLUE}Checking test structure...${NC}"
+
+    for file in $test_files; do
+        local has_arrange=$(grep -c "const\|let\|var\|=.*new\|setup" "$file" 2>/dev/null || echo 0)
+        local has_act=$(grep -c "\..*(" "$file" 2>/dev/null || echo 0)
+        local has_assert=$(grep -c "expect\|assert" "$file" 2>/dev/null || echo 0)
+
+        if [[ $has_arrange -eq 0 ]] || [[ $has_act -eq 0 ]] || [[ $has_assert -eq 0 ]]; then
+            issues+="⚠️  Test file missing AAA pattern (Arrange-Act-Assert): $(basename $file)\n"
+            has_issues=1
+        fi
+    done
+
+    # Check test count
+    local test_count=$(echo "$test_files" | wc -l)
+    if [[ $test_count -lt 10 ]]; then
+        issues+="⚠️  Only $test_count test files (recommend 30-40 for comprehensive coverage)\n"
+        has_issues=1
+    fi
+
+    if [[ $has_issues -eq 1 ]]; then
+        echo -e "${RED}❌ Test quality issues found:${NC}\n"
+        echo -e "$issues"
+
+        # Generate instruction
+        local instruction_file="${test_dir}.test-quality-instruction.md"
+        cat > "$instruction_file" << EOF
+# Test Quality Issues
+
+The following test quality issues were identified:
+
+$issues
+
+## Required Fixes:
+
+### 1. Remove Weak Assertions
+
+Replace weak assertions with specific checks:
+
+❌ BAD:
+\`\`\`javascript
+expect(result).toBeTruthy();
+expect(user).toBeDefined();
+\`\`\`
+
+✅ GOOD:
+\`\`\`javascript
+expect(result.success).toBe(true);
+expect(user.email).toBe('test@example.com');
+\`\`\`
+
+### 2. Follow AAA Pattern
+
+Every test should have:
+- **Arrange**: Set up test data
+- **Act**: Call the function
+- **Assert**: Check the result
+
+\`\`\`javascript
+test('calculates total', () => {
+  // Arrange
+  const items = [{ price: 10 }, { price: 20 }];
+
+  // Act
+  const total = calculateTotal(items);
+
+  // Assert
+  expect(total).toBe(30);
+});
+\`\`\`
+
+### 3. Add More Tests
+
+Aim for 30-40 tests covering:
+- Happy paths (5-10 tests)
+- Error cases (10-15 tests)
+- Edge cases (10-15 tests)
+- Boundary conditions (5-10 tests)
+
+### 4. Test Isolation
+
+Each test should:
+- Not depend on other tests
+- Clean up after itself
+- Use fresh data
+
+## Quality Checklist:
+
+- [ ] No weak assertions
+- [ ] All tests follow AAA pattern
+- [ ] 30+ tests for comprehensive coverage
+- [ ] Tests are isolated
+- [ ] Each test has 1-3 specific assertions
+- [ ] Test names describe what's being tested
+EOF
+        echo -e "${YELLOW}Instruction generated: $instruction_file${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}✅ Test quality checks passed${NC}"
+    fi
+}
+
+cmd_preflight() {
+    local project_dir="$1"
+
+    echo -e "${BLUE}━━━ PREFLIGHT ━━━${NC}"
+
+    [[ -d "$project_dir" ]] || {
+        echo -e "${RED}❌ Project directory not found: $project_dir${NC}"
+        exit 1
+    }
+
+    local has_issues=0
+    local issues=""
+
+    # Check for package manager files
+    echo -e "${BLUE}Checking dependencies...${NC}"
+
+    if [[ -f "$project_dir/package.json" ]]; then
+        # Node.js project
+        if [[ ! -d "$project_dir/node_modules" ]]; then
+            issues+="⚠️  node_modules not found - run: npm install\n"
+            has_issues=1
+        fi
+
+        # Check if dependencies are installed
+        if [[ -f "$project_dir/package-lock.json" ]]; then
+            local lock_time=$(stat -f %m "$project_dir/package-lock.json" 2>/dev/null || stat -c %Y "$project_dir/package-lock.json" 2>/dev/null)
+            local pkg_time=$(stat -f %m "$project_dir/package.json" 2>/dev/null || stat -c %Y "$project_dir/package.json" 2>/dev/null)
+            if [[ $pkg_time -gt $lock_time ]]; then
+                issues+="⚠️  package.json newer than lock file - run: npm install\n"
+                has_issues=1
+            fi
+        fi
+    elif [[ -f "$project_dir/requirements.txt" ]]; then
+        # Python project
+        if ! pip list 2>/dev/null | grep -q "pytest"; then
+            issues+="⚠️  pytest not installed - run: pip install pytest\n"
+            has_issues=1
+        fi
+    elif [[ -f "$project_dir/go.mod" ]]; then
+        # Go project
+        if [[ ! -d "$project_dir/vendor" ]] && ! go list ./... &>/dev/null; then
+            issues+="⚠️  Go dependencies not ready - run: go mod download\n"
+            has_issues=1
+        fi
+    else
+        issues+="⚠️  No package manager file found (package.json, requirements.txt, go.mod)\n"
+        has_issues=1
+    fi
+
+    # Check build system
+    echo -e "${BLUE}Checking build system...${NC}"
+
+    if [[ -f "$project_dir/package.json" ]]; then
+        # Check if build script exists
+        if ! grep -q '"build"' "$project_dir/package.json"; then
+            issues+="⚠️  No build script in package.json\n"
+            has_issues=1
+        else
+            # Try to build
+            if ! (cd "$project_dir" && npm run build &>/dev/null); then
+                issues+="⚠️  Build fails - run: npm run build (and fix errors)\n"
+                has_issues=1
+            fi
+        fi
+    fi
+
+    # Check test runner
+    echo -e "${BLUE}Checking test runner...${NC}"
+
+    if [[ -f "$project_dir/package.json" ]]; then
+        if ! grep -q '"test"' "$project_dir/package.json"; then
+            issues+="⚠️  No test script in package.json\n"
+            has_issues=1
+        fi
+    elif [[ -f "$project_dir/pytest.ini" ]] || [[ -f "$project_dir/setup.py" ]]; then
+        if ! command -v pytest &>/dev/null; then
+            issues+="⚠️  pytest not in PATH\n"
+            has_issues=1
+        fi
+    fi
+
+    # Check for .env if .env.example exists
+    if [[ -f "$project_dir/.env.example" ]] && [[ ! -f "$project_dir/.env" ]]; then
+        issues+="⚠️  .env.example exists but .env missing - copy and configure it\n"
+        has_issues=1
+    fi
+
+    if [[ $has_issues -eq 1 ]]; then
+        echo -e "${RED}❌ Preflight checks failed:${NC}\n"
+        echo -e "$issues"
+
+        # Generate instruction
+        local instruction_file="${project_dir}/preflight-instruction.md"
+        cat > "$instruction_file" << EOF
+# Preflight Check Failed
+
+The following environment issues were found:
+
+$issues
+
+## Required Fixes:
+
+### For Node.js Projects:
+\`\`\`bash
+npm install              # Install dependencies
+npm run build           # Verify build works
+npm test                # Verify test runner works
+\`\`\`
+
+### For Python Projects:
+\`\`\`bash
+pip install -r requirements.txt  # Install dependencies
+pip install pytest              # Install test framework
+pytest                          # Verify test runner works
+\`\`\`
+
+### For Go Projects:
+\`\`\`bash
+go mod download         # Download dependencies
+go build ./...          # Verify build works
+go test ./...           # Verify test runner works
+\`\`\`
+
+### Environment Variables:
+If .env.example exists:
+\`\`\`bash
+cp .env.example .env
+# Edit .env with actual values
+\`\`\`
+
+## Preflight Checklist:
+
+- [ ] Dependencies installed
+- [ ] Build system works
+- [ ] Test runner configured
+- [ ] Environment variables set
+- [ ] Can run tests (even if they fail)
+EOF
+        echo -e "${YELLOW}Instruction generated: $instruction_file${NC}"
+        exit 1
+    else
+        echo -e "${GREEN}✅ Preflight checks passed${NC}"
+        echo -e "${GREEN}   Environment ready for TDD implementation${NC}"
+    fi
+}
+
+cmd_visual_regression() {
+    local project_dir="$1"
+
+    echo -e "${BLUE}━━━ VISUAL-REGRESSION ━━━${NC}"
+
+    [[ -d "$project_dir" ]] || {
+        echo -e "${RED}❌ Project directory not found: $project_dir${NC}"
+        exit 1
+    }
+
+    # Check if visual regression tool is configured
+    local has_tool=0
+
+    if [[ -f "$project_dir/playwright.config.ts" ]] || [[ -f "$project_dir/playwright.config.js" ]]; then
+        has_tool=1
+        echo -e "${BLUE}Detected Playwright${NC}"
+    elif grep -q "cypress" "$project_dir/package.json" 2>/dev/null; then
+        has_tool=1
+        echo -e "${BLUE}Detected Cypress${NC}"
+    elif [[ -f "$project_dir/.storybook/main.js" ]]; then
+        has_tool=1
+        echo -e "${BLUE}Detected Storybook (can use Chromatic)${NC}"
+    fi
+
+    if [[ $has_tool -eq 0 ]]; then
+        echo -e "${YELLOW}⚠️  No visual regression tool detected${NC}"
+        echo -e "${YELLOW}   Skipping visual regression tests${NC}"
+        echo -e "${YELLOW}   To enable, install Playwright or Cypress${NC}"
+        exit 0
+    fi
+
+    # Create baseline directory if it doesn't exist
+    mkdir -p "$project_dir/.ralph/visual-baselines"
+
+    # Generate instruction for visual regression
+    local instruction_file="$project_dir/.ralph/visual-regression-instruction.md"
+    cat > "$instruction_file" << EOF
+# Visual Regression Testing
+
+## Setup:
+
+### For Playwright:
+\`\`\`bash
+npx playwright test --update-snapshots  # Create baseline screenshots
+\`\`\`
+
+### For Cypress:
+\`\`\`bash
+npm run cypress:open
+# Take screenshots of each important view
+# Save to cypress/snapshots/
+\`\`\`
+
+## Run Visual Tests:
+
+\`\`\`bash
+npx playwright test  # Compare against baselines
+\`\`\`
+
+## Review Diffs:
+
+If tests fail:
+1. Open the diff report (usually in playwright-report/ or .ralph/visual-regression-report.html)
+2. For each failed screenshot:
+   - **If intentional change**: Update baseline
+   - **If regression**: Fix the code
+
+## Update Baselines:
+
+\`\`\`bash
+npx playwright test --update-snapshots
+git add .ralph/visual-baselines/
+git commit -m "ralph: GATE 6.9 - approve new visual baseline"
+\`\`\`
+
+## Visual Regression Checklist:
+
+- [ ] Baseline screenshots exist
+- [ ] All views screenshot correctly
+- [ ] Diffs < 5% (or approved)
+- [ ] No unintended visual changes
+- [ ] Baselines committed to git
+EOF
+
+    echo -e "${GREEN}✅ Visual regression setup complete${NC}"
+    echo -e "${YELLOW}Instruction generated: $instruction_file${NC}"
+    echo -e "${YELLOW}Follow instructions to capture baselines and run tests${NC}"
+}
+
+cmd_performance_audit() {
+    local project_dir="$1"
+
+    echo -e "${BLUE}━━━ PERFORMANCE-AUDIT ━━━${NC}"
+
+    [[ -d "$project_dir" ]] || {
+        echo -e "${RED}❌ Project directory not found: $project_dir${NC}"
+        exit 1
+    }
+
+    # Generate instruction for performance audit
+    local instruction_file="$project_dir/.ralph/performance-audit-instruction.md"
+    cat > "$instruction_file" << EOF
+# Performance Audit
+
+## Run Lighthouse:
+
+### Option 1: Chrome DevTools
+1. Open project in browser (npm run dev / npm start)
+2. Open Chrome DevTools (F12)
+3. Go to "Lighthouse" tab
+4. Click "Generate report"
+
+### Option 2: CLI
+\`\`\`bash
+npm install -g lighthouse
+lighthouse http://localhost:3000 --output html --output-path .ralph/lighthouse-report.html
+\`\`\`
+
+## Performance Requirements:
+
+### Lighthouse Score: ≥90
+- Performance: ≥90
+- Accessibility: ≥90
+- Best Practices: ≥90
+- SEO: ≥90
+
+### Core Web Vitals:
+- **LCP** (Largest Contentful Paint): <2.5s
+- **FID** (First Input Delay): <100ms
+- **CLS** (Cumulative Layout Shift): <0.1
+
+### Bundle Size:
+- **JavaScript**: <500KB gzipped
+- **CSS**: <100KB gzipped
+- **Images**: Optimized (use WebP/AVIF)
+
+## Check Bundle Size:
+
+### For Vite/Webpack:
+\`\`\`bash
+npm run build
+# Check dist/ or build/ directory sizes
+du -sh dist/*
+\`\`\`
+
+### For Next.js:
+\`\`\`bash
+npm run build
+# Sizes shown in output
+\`\`\`
+
+## Common Fixes:
+
+### If bundle too large:
+- Code split with dynamic imports
+- Remove unused dependencies
+- Use tree-shaking
+
+### If LCP slow:
+- Optimize images (use next/image or similar)
+- Preload critical resources
+- Reduce server response time
+
+### If CLS high:
+- Set explicit width/height on images
+- Reserve space for dynamic content
+- Avoid layout shifts
+
+## Performance Checklist:
+
+- [ ] Lighthouse score ≥90 for all categories
+- [ ] LCP <2.5s
+- [ ] FID <100ms
+- [ ] CLS <0.1
+- [ ] Bundle size <500KB gzipped
+- [ ] No duplicate dependencies
+- [ ] Images optimized
+EOF
+
+    echo -e "${GREEN}✅ Performance audit setup complete${NC}"
+    echo -e "${YELLOW}Instruction generated: $instruction_file${NC}"
+    echo -e "${YELLOW}Follow instructions to run Lighthouse and check bundle size${NC}"
+}
+
 # ==============================================================================
 # HELP & USAGE
 # ==============================================================================
@@ -549,11 +1219,21 @@ USAGE: design-ops-v3-refactored.sh <command> <spec-file>
 
 CORE COMMANDS (in order):
 
-  stress-test <spec>      Check completeness (runs local validation)
-  validate <spec>         Check clarity (runs structure validation)
-  generate <spec>         Generate PRP (outputs extraction instruction)
-  check <prp>             Check PRP (validates structure)
-  implement <prp>         Generate Ralph steps (outputs extraction instruction)
+  stress-test <spec>       Check completeness (runs local validation)
+  validate <spec>          Check clarity (runs structure validation)
+  security-scan <spec>     Check security requirements
+  generate <spec>          Generate PRP (outputs extraction instruction)
+  check <prp>              Check PRP (validates structure)
+  generate-tests <prp>     Generate test suite
+  test-validate <test-dir> Validate tests fail correctly (RED state)
+  test-quality <test-dir>  Check test quality (no weak assertions)
+  preflight <project>      Check environment ready for TDD
+  implement-tdd <project>  Implement code with TDD
+  parallel-checks <project> Run build/lint/integration/a11y checks
+  visual-regression <project> Screenshot testing
+  smoke-test <project>     Run E2E critical paths
+  ai-review <project>      AI security/quality review
+  performance-audit <project> Lighthouse/bundle size audit
 
 WORKFLOW:
 
@@ -619,7 +1299,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             usage
             ;;
-        create-spec|stress-test|validate|generate|check|implement|generate-tests|implement-tdd|parallel-checks|smoke-test|ai-review)
+        create-spec|stress-test|validate|security-scan|generate|check|implement|generate-tests|test-validate|test-quality|preflight|implement-tdd|parallel-checks|visual-regression|smoke-test|ai-review|performance-audit)
             COMMAND="$1"
             shift
             break
@@ -636,14 +1316,20 @@ case "$COMMAND" in
     create-spec) cmd_create_spec "$@" ;;
     stress-test) cmd_stress_test "$@" ;;
     validate) cmd_validate "$@" ;;
+    security-scan) cmd_security_scan "$@" ;;
     generate) cmd_generate "$@" ;;
     check) cmd_check "$@" ;;
     implement) cmd_implement "$@" ;;
     generate-tests) cmd_generate_tests "$@" ;;
+    test-validate) cmd_test_validate "$@" ;;
+    test-quality) cmd_test_quality "$@" ;;
+    preflight) cmd_preflight "$@" ;;
     implement-tdd) cmd_implement_tdd "$@" ;;
     parallel-checks) cmd_parallel_checks "$@" ;;
+    visual-regression) cmd_visual_regression "$@" ;;
     smoke-test) cmd_smoke_test "$@" ;;
     ai-review) cmd_ai_review "$@" ;;
+    performance-audit) cmd_performance_audit "$@" ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}"
         usage
