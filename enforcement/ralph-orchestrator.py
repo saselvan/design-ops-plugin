@@ -38,6 +38,26 @@ def generate_tasks(spec_file):
             "subject": "GATE 1: STRESS_TEST - Check spec completeness",
             "description": f"""## GATE 1: STRESS_TEST
 
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
+
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed spec file: {spec_path}
 - Errors from last stress-test run
@@ -107,6 +127,26 @@ Write to `.ralph/metrics/gate-1.json` on completion.
             "id": "ralph-2",
             "subject": "GATE 2: VALIDATE + SECURITY_SCAN - Check clarity and security",
             "description": f"""## GATE 2: VALIDATE + SECURITY_SCAN
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed spec file: {spec_path}
@@ -182,6 +222,26 @@ Write to `.ralph/metrics/gate-2.json` on completion.
             "subject": "GATE 3: GENERATE_PRP - Extract Product Requirements Prompt",
             "description": f"""## GATE 3: GENERATE_PRP
 
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
+
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed spec file: {spec_path}
 - NO full conversation history
@@ -252,6 +312,26 @@ Write to `.ralph/metrics/gate-3.json` on completion.
             "id": "ralph-4",
             "subject": "GATE 4: CHECK_PRP - Validate PRP structure",
             "description": f"""## GATE 4: CHECK_PRP
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed PRP file: {prp_file}
@@ -324,6 +404,26 @@ Write to `.ralph/metrics/gate-4.json` on completion.
             "id": "ralph-5",
             "subject": "GATE 5: GENERATE_TESTS - Create test suite",
             "description": f"""## GATE 5: GENERATE_TESTS
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed PRP file: {prp_file}
@@ -400,6 +500,26 @@ Write to `.ralph/metrics/gate-5.json` on completion.
             "id": "ralph-5.5",
             "subject": "GATE 5.5: TEST_VALIDATION + TEST_QUALITY - Validate test suite",
             "description": f"""## GATE 5.5: TEST_VALIDATION + TEST_QUALITY
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed test files: {test_dir}/
@@ -478,6 +598,26 @@ Write to `.ralph/metrics/gate-5.5.json` on completion.
             "subject": "GATE 5.75: PREFLIGHT - Environment checks",
             "description": f"""## GATE 5.75: PREFLIGHT
 
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
+
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed project files
 - NO full conversation history
@@ -550,6 +690,26 @@ Write to `.ralph/metrics/gate-5.75.json` on completion.
             "id": "ralph-6",
             "subject": "GATE 6: IMPLEMENT_TDD - Write code to pass tests",
             "description": f"""## GATE 6: IMPLEMENT_TDD
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed test files: {test_dir}/
@@ -626,6 +786,26 @@ Write to `.ralph/metrics/gate-6.json` on completion.
             "subject": "GATE 6.5: PARALLEL_CHECKS - Build/Lint/Integration/A11y",
             "description": f"""## GATE 6.5: PARALLEL_CHECKS
 
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
+
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
 - NO full conversation history
@@ -698,6 +878,26 @@ Write to `.ralph/metrics/gate-6.5.json` on completion.
             "id": "ralph-6.9",
             "subject": "GATE 6.9: VISUAL_REGRESSION - Screenshot testing",
             "description": f"""## GATE 6.9: VISUAL_REGRESSION
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
@@ -775,6 +975,26 @@ Write to `.ralph/metrics/gate-6.9.json` on completion.
             "subject": "GATE 7: SMOKE_TEST - E2E critical paths",
             "description": f"""## GATE 7: SMOKE_TEST
 
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
+
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
 - Latest committed E2E tests
@@ -848,6 +1068,26 @@ Write to `.ralph/metrics/gate-7.json` on completion.
             "id": "ralph-8",
             "subject": "GATE 8: AI_CODE_REVIEW + PERFORMANCE_AUDIT - Final validation",
             "description": f"""## GATE 8: AI_CODE_REVIEW + PERFORMANCE_AUDIT
+
+## 🚨 READ FIRST: Gate Constraints
+
+**BEFORE YOU START:**
+1. Read: `~/.claude/design-ops/enforcement/ralph-constraints.md`
+2. Understand: Your ONE job is to make THIS gate pass
+3. Remember: NO extra features, NO refactoring outside scope
+
+**Rules:**
+- ✅ Fix ONLY what fails validation
+- ✅ Commit after EVERY fix  
+- ✅ Follow ASSESS → FIX → COMMIT → VALIDATE loop
+- ❌ NO adding features
+- ❌ NO refactoring unrelated code
+- ❌ NO optimizing prematurely
+- ❌ NO "I should also..." thoughts
+
+**If validation says "fix X"** → Fix X only. Not X + Y + Z.
+
+---
 
 **STATELESS CONTEXT (each iteration sees ONLY):**
 - Latest committed source files: {code_dir}/
