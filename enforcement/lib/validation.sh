@@ -108,20 +108,20 @@ validate_prp_structure() {
 
     echo "Checking PRP structure..."
 
-    # Validate required PRP sections
-    if ! echo "$content" | grep -q "^# PRP:"; then
+    # Validate required PRP sections (accept both "# PRP:" and "# PRP-")
+    if ! echo "$content" | grep -qE "^# PRP[:-]"; then
         echo -e "  ${RED}❌${NC} Missing PRP metadata"
         return 1
     fi
     echo -e "  ${GREEN}✓${NC} PRP metadata"
 
-    if ! echo "$content" | grep -q "## Phase"; then
+    if ! echo "$content" | grep -qE "## (Phase|Section [0-9]|Implementation)"; then
         echo -e "  ${RED}❌${NC} Missing phase sections"
         return 1
     fi
     echo -e "  ${GREEN}✓${NC} Phase sections"
 
-    if ! echo "$content" | grep -q "### Deliverables\|^### F[0-9]"; then
+    if ! echo "$content" | grep -qE "### (Deliverables|F[0-9]|FR-|Phase)"; then
         echo -e "  ${RED}❌${NC} Missing deliverables"
         return 1
     fi

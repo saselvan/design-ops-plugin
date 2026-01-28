@@ -484,3 +484,322 @@ EOF
     echo "Please read the instruction and generate Ralph steps using structured extraction:"
     echo "  cat $instruction_file"
 }
+
+generate_create_spec_instruction() {
+    local req_dir="$1"
+    local spec_file="$2"
+    local output_dir="${3:-.}"
+    local instruction_file="${output_dir}/create-spec-instruction.md"
+
+    cat > "$instruction_file" << EOF
+# Create Spec Instruction
+
+## Your Task
+
+Create a RALPH specification from requirements in directory: $req_dir
+Output spec to: $spec_file
+
+## Process
+
+1. **Read all files in requirements directory**
+   - Read every file in $req_dir
+   - Understand the problem being solved
+   - Identify key stakeholders and use cases
+
+2. **Structure the spec using RALPH template**
+   - Follow RALPH-RETRIEVAL.md specification format
+   - Include all required sections:
+     * Problem Statement
+     * User Journey (states, transitions, error paths)
+     * Technical Requirements
+     * System Invariants
+     * Edge Cases
+     * Failure Modes
+     * Non-Functional Requirements
+     * Acceptance Criteria
+
+3. **Write the spec**
+   - Save to: $spec_file
+   - Use clear, unambiguous language
+   - Make every requirement testable
+
+## Next Steps
+
+After creating the spec:
+1. Run: ./design-ops-v3-refactored.sh stress-test $spec_file
+2. Then: ./design-ops-v3-refactored.sh validate $spec_file
+
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+}
+
+generate_test_generation_instruction() {
+    local prp_file="$1"
+    local test_dir="$2"
+    local output_dir="${3:-.}"
+    local instruction_file="${output_dir}/generate-tests-instruction.md"
+
+    cat > "$instruction_file" << EOF
+# Generate Tests Instruction
+
+## Your Task
+
+Generate test files from PRP: $prp_file
+Output tests to: $test_dir/
+
+## Process
+
+1. **Read the PRP**
+   - Understand all phases and deliverables
+   - Identify success criteria
+   - Note failure modes
+
+2. **Generate test files**
+   - Create unit tests for each component
+   - Create integration tests for interactions
+   - Create E2E tests for user journeys
+   - Follow TDD principles - tests should fail initially
+
+3. **Test structure**
+   - Use appropriate test framework (Jest/Vitest/Pytest)
+   - Each test maps to a success criterion
+   - Include edge case tests
+   - Include error path tests
+
+## Output
+
+Write all tests to: $test_dir/
+- $test_dir/unit/
+- $test_dir/integration/
+- $test_dir/e2e/
+
+## Next Steps
+
+After generating tests:
+1. Run: ./design-ops-v3-refactored.sh implement-tdd $test_dir
+
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+}
+
+generate_tdd_instruction() {
+    local test_dir="$1"
+    local test_output="$2"
+    local code_dir="$3"
+    local output_dir="${4:-.}"
+    local instruction_file="${output_dir}/implement-tdd-instruction.md"
+
+    cat > "$instruction_file" << EOF
+# TDD Implementation Instruction
+
+## Your Task
+
+Implement code to make failing tests pass.
+
+## Test Results
+
+\`\`\`
+$test_output
+\`\`\`
+
+## Process
+
+1. **Analyze test failures**
+   - Read each failing test carefully
+   - Understand what behavior is expected
+   - Identify minimal code needed
+
+2. **Implement code**
+   - Write minimal implementation to pass tests
+   - Follow TDD red-green-refactor cycle
+   - Do not modify tests unless they have bugs
+   - Write to: $code_dir/
+
+3. **Verify**
+   - Run tests after each change
+   - All tests should pass
+   - No test modifications unless justified
+
+## Next Steps
+
+After implementation:
+1. Run: ./design-ops-v3-refactored.sh parallel-checks $code_dir
+
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+}
+
+generate_parallel_checks_instruction() {
+    local code_dir="$1"
+    local check_results="$2"
+    local output_dir="${3:-.}"
+    local instruction_file="${output_dir}/parallel-checks-instruction.md"
+
+    cat > "$instruction_file" << EOF
+# Parallel Checks Instruction
+
+## Your Task
+
+Fix build, lint, and accessibility issues.
+
+## Check Results
+
+\`\`\`
+$check_results
+\`\`\`
+
+## Process
+
+1. **Fix build errors**
+   - Resolve TypeScript/compilation errors
+   - Fix import issues
+   - Ensure all code compiles
+
+2. **Fix lint violations**
+   - Follow project linting rules
+   - Fix all ESLint/Pylint warnings
+   - Maintain code quality standards
+
+3. **Fix accessibility issues**
+   - Ensure WCAG 2.1 AA compliance
+   - Add ARIA labels where needed
+   - Fix keyboard navigation
+
+## Next Steps
+
+After fixes:
+1. Run: ./design-ops-v3-refactored.sh smoke-test $code_dir
+
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+}
+
+generate_smoke_test_instruction() {
+    local code_dir="$1"
+    local test_output="$2"
+    local output_dir="${3:-.}"
+    local instruction_file="${output_dir}/smoke-test-instruction.md"
+
+    cat > "$instruction_file" << EOF
+# Smoke Test Instruction
+
+## Your Task
+
+Fix E2E smoke test failures.
+
+## Test Results
+
+\`\`\`
+$test_output
+\`\`\`
+
+## Process
+
+1. **Analyze failures**
+   - Read E2E test failure details
+   - Identify root causes
+   - Check if it's a test issue or code issue
+
+2. **Fix issues**
+   - Fix the root cause of each failure
+   - Ensure critical user paths work
+   - Do not break existing passing tests
+
+3. **Verify**
+   - Run smoke tests again
+   - All critical paths should pass
+
+## Next Steps
+
+After fixes:
+1. Run: ./design-ops-v3-refactored.sh ai-review $code_dir
+
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+}
+
+generate_ai_review_instruction() {
+    local code_dir="$1"
+    local output_dir="${2:-.}"
+    local instruction_file="${output_dir}/ai-review-instruction.md"
+
+    cat > "$instruction_file" << EOF
+# AI Security Review Instruction
+
+## Your Task
+
+Perform a comprehensive security and quality review using Opus 4.5.
+
+## Review Areas
+
+1. **Security Vulnerabilities**
+   - SQL injection
+   - XSS (Cross-site scripting)
+   - CSRF (Cross-site request forgery)
+   - Authentication/Authorization flaws
+   - Sensitive data exposure
+   - Insecure dependencies
+   - OWASP Top 10 issues
+
+2. **Code Quality**
+   - Error handling completeness
+   - Input validation
+   - Resource management
+   - Race conditions
+   - Memory leaks
+   - Performance issues
+
+3. **Best Practices**
+   - Secure coding standards
+   - Principle of least privilege
+   - Defense in depth
+   - Secure defaults
+
+## Process
+
+1. **Scan all code in: $code_dir**
+2. **Use Opus 4.5 for deep analysis**
+3. **Report findings with severity: CRITICAL, HIGH, MEDIUM, LOW**
+4. **For each issue, provide:**
+   - Description
+   - Location (file:line)
+   - Impact
+   - Fix recommendation
+
+## Output Format
+
+\`\`\`json
+{
+  "critical_issues": [],
+  "high_issues": [],
+  "medium_issues": [],
+  "low_issues": [],
+  "summary": "Overall security posture",
+  "ready_for_production": true | false
+}
+\`\`\`
+
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+}
+
+# Helper function for running tests
+run_tests() {
+    local test_dir="$1"
+
+    # Try common test runners
+    if [[ -f "package.json" ]]; then
+        npm test 2>&1 || true
+    elif [[ -f "pytest.ini" ]] || [[ -f "setup.py" ]]; then
+        pytest "$test_dir" 2>&1 || true
+    else
+        echo "No test runner detected"
+        return 1
+    fi
+}
