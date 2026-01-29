@@ -341,6 +341,133 @@ EOF
     echo "  cat $instruction_file"
 }
 
+generate_check_instruction() {
+    local prp_file="$1"
+    local output_dir="${2:-.}"
+    local instruction_file="${output_dir}/check-instruction.md"
+    local prp_content
+    prp_content=$(cat "$prp_file")
+
+    # Try to find source spec
+    local spec_file="${prp_file%-PRP.md}.md"
+    local spec_content=""
+    if [[ -f "$spec_file" ]]; then
+        spec_content=$(cat "$spec_file")
+    fi
+
+    cat > "$instruction_file" << 'EOF'
+# PRP Check Instruction (LLM Assessment)
+
+## Your Task
+
+Perform FULL LLM ASSESSMENT of this PRP against its source spec. Structure validation already passed - now check content quality.
+
+**CRITICAL:** This is NOT just a structural check. You must compare PRP to spec and verify extraction completeness.
+
+### Assessment Areas (ALL REQUIRED)
+
+1. **Extraction Completeness**
+   - Every spec section must be in PRP
+   - Content must be VERBATIM, not paraphrased
+   - No invented requirements (not in spec = not in PRP)
+
+2. **Success Criteria Mapping**
+   - Every spec success criterion → PRP success criterion
+   - Measurements must be testable
+   - No vague criteria ("works properly")
+
+3. **Missing Sections Check**
+   - Empty States (what does UI show when no data?)
+   - Loading States (what does user see while loading?)
+   - Error Handling (what happens when things fail?)
+   - Testing Requirements (what tests are needed?)
+   - Accessibility (WCAG compliance?)
+
+4. **Schema/API Verification**
+   - Database schema in appendix matches spec
+   - API endpoints in appendix match spec
+   - Field names are consistent throughout
+
+5. **Invariant Coverage**
+   - Domain invariants listed in Meta
+   - Each relevant invariant addressed in content
+
+### PRP CONTENT
+
+```
+EOF
+
+    echo "$prp_content" >> "$instruction_file"
+
+    cat >> "$instruction_file" << 'EOF'
+```
+
+EOF
+
+    if [[ -n "$spec_content" ]]; then
+        cat >> "$instruction_file" << 'EOF'
+### SOURCE SPEC (for comparison)
+
+```
+EOF
+        echo "$spec_content" >> "$instruction_file"
+        cat >> "$instruction_file" << 'EOF'
+```
+
+EOF
+    else
+        cat >> "$instruction_file" << 'EOF'
+### SOURCE SPEC
+
+Source spec not found at expected location. Read the source spec separately to compare.
+
+EOF
+    fi
+
+    cat >> "$instruction_file" << 'EOF'
+## Output Format
+
+```json
+{
+  "extraction_assessment": {
+    "problem_statement": "verbatim" | "paraphrased" | "missing",
+    "success_criteria": "complete" | "partial" | "missing",
+    "scope": "complete" | "partial" | "missing",
+    "functional_requirements": "complete" | "partial" | "missing",
+    "failure_modes": "complete" | "partial" | "missing"
+  },
+  "missing_sections": [
+    "Empty States - not found in PRP",
+    "Loading States - not found in PRP"
+  ],
+  "content_issues": [
+    "SC-2 paraphrased instead of verbatim",
+    "Database schema missing 'status' field from spec"
+  ],
+  "ready_for_implementation": true | false,
+  "fixes_needed": [
+    "Add Empty States section from spec",
+    "Add Testing Requirements section"
+  ]
+}
+```
+
+## When You're Done
+
+1. If issues found: Fix the PRP, then re-run check
+2. If all clear: Report "PRP assessment complete - ready for implementation"
+3. Next step: `./design-ops-v3-refactored.sh generate-tests {prp-file}`
+
+---
+This is PRP CHECK. You are doing FULL LLM ASSESSMENT, not just structure validation.
+EOF
+
+    echo -e "${GREEN}✅${NC} Instruction generated: $instruction_file"
+    echo ""
+    echo "Please read the instruction and perform full LLM assessment:"
+    echo "  cat $instruction_file"
+}
+
 generate_implement_instruction() {
     local prp_file="$1"
     local output_dir="${2:-.}"

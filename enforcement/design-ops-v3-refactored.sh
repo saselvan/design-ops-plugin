@@ -8,13 +8,15 @@
 #   - Outputs structured instructions for Claude to follow
 #   - No API calls, no subprocess LLM invocations
 #
-# Version: 3.4-refactored
-# Date: 2026-01-26
+# Version: 3.5-refactored
+# Date: 2026-01-28
+# Changes: Added prominent LLM ASSESSMENT REQUIRED warnings after each gate's
+#          deterministic checks pass. Ensures operators don't skip LLM work.
 # ==============================================================================
 
 set -e
 
-VERSION="3.4-refactored"
+VERSION="3.5-refactored"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESIGN_OPS_BASE="${DESIGN_OPS_BASE:-$(dirname "$SCRIPT_DIR")}"
 
@@ -179,7 +181,15 @@ cmd_stress_test() {
 
     echo ""
     echo -e "${GREEN}✅ Local checks passed${NC}"
-    echo -e "${YELLOW}Next step: Review the instruction and check spec completeness${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM ASSESSMENT REQUIRED - GATE NOT COMPLETE                      ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/stress-test-instruction.md${NC}"
+    echo -e "${RED}║  2. ACT:  Assess spec against 6 coverage areas                       ║${NC}"
+    echo -e "${RED}║  3. FIX:  Add missing sections to spec                               ║${NC}"
+    echo -e "${RED}║  4. RE-RUN: $0 stress-test $spec_file${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_validate() {
@@ -215,8 +225,17 @@ cmd_validate() {
 
     echo ""
     echo -e "${GREEN}✅ Structure validation passed${NC}"
-    echo -e "${YELLOW}Checking against: Universal Invariants (1-10) + Domain Invariants from: $domains${NC}"
-    echo -e "${YELLOW}Next step: Review the instruction and validate against all invariants${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM ASSESSMENT REQUIRED - GATE NOT COMPLETE                      ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/validate-instruction.md${NC}"
+    echo -e "${RED}║  2. ACT:  Check spec against ALL invariants:                         ║${NC}"
+    echo -e "${RED}║           - Universal Invariants (1-10)                              ║${NC}"
+    echo -e "${RED}║           - Domain Invariants: $domains${NC}"
+    echo -e "${RED}║  3. FIX:  Address any violations found                               ║${NC}"
+    echo -e "${RED}║  4. RE-RUN: $0 validate $spec_file${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_generate() {
@@ -304,9 +323,25 @@ cmd_check() {
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     update_pipeline_state "$state_file" "check" "{\"timestamp\":\"$timestamp\",\"status\":\"pass\"}"
 
+    # Generate instruction for LLM assessment
     echo ""
-    echo -e "${GREEN}✅ PRP validation passed${NC}"
-    echo -e "${YELLOW}Next step: Review PRP, then run 'implement' for Ralph generation${NC}"
+    echo -e "${CYAN}Generating instruction for PRP assessment...${NC}"
+    generate_check_instruction "$prp_file" "$INSTRUCTION_OUTPUT_DIR"
+
+    echo ""
+    echo -e "${GREEN}✅ PRP structure validation passed${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM ASSESSMENT REQUIRED - GATE NOT COMPLETE                      ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/check-instruction.md${NC}"
+    echo -e "${RED}║  2. ACT:  Compare PRP to source spec for:                            ║${NC}"
+    echo -e "${RED}║           - Extraction completeness (VERBATIM from spec)             ║${NC}"
+    echo -e "${RED}║           - All success criteria mapped                              ║${NC}"
+    echo -e "${RED}║           - No missing sections (Empty States, Testing, etc.)        ║${NC}"
+    echo -e "${RED}║  3. FIX:  Add any missing content to PRP                             ║${NC}"
+    echo -e "${RED}║  4. RE-RUN: $0 check $prp_file${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_implement() {
@@ -420,7 +455,18 @@ cmd_generate_tests() {
 
     echo ""
     echo -e "${GREEN}✅ Instruction generated${NC}"
-    echo -e "${YELLOW}Next step: Follow the instruction to generate test files${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM WORK REQUIRED - GATE NOT COMPLETE                            ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/generate-tests-instruction.md${NC}"
+    echo -e "${RED}║  2. ACT:  Generate test files from PRP:                              ║${NC}"
+    echo -e "${RED}║           - Unit tests for each component                            ║${NC}"
+    echo -e "${RED}║           - Integration tests for interactions                       ║${NC}"
+    echo -e "${RED}║           - E2E tests for user journeys                              ║${NC}"
+    echo -e "${RED}║  3. WRITE: Output tests to $test_dir/                                ║${NC}"
+    echo -e "${RED}║  4. VERIFY: Tests should FAIL initially (TDD)                        ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_implement_tdd() {
@@ -451,7 +497,16 @@ cmd_implement_tdd() {
 
     echo ""
     echo -e "${GREEN}✅ Instruction generated${NC}"
-    echo -e "${YELLOW}Next step: Follow the instruction to implement code${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM WORK REQUIRED - GATE NOT COMPLETE                            ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/implement-tdd-instruction.md${NC}"
+    echo -e "${RED}║  2. ANALYZE: Test failures shown above                               ║${NC}"
+    echo -e "${RED}║  3. IMPLEMENT: Write minimal code to pass each test                  ║${NC}"
+    echo -e "${RED}║  4. VERIFY: Run tests until all pass                                 ║${NC}"
+    echo -e "${RED}║  5. RE-RUN: $0 implement-tdd $test_dir${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_parallel_checks() {
@@ -486,7 +541,15 @@ cmd_parallel_checks() {
 
     echo ""
     echo -e "${GREEN}✅ Instruction generated${NC}"
-    echo -e "${YELLOW}Next step: Follow the instruction to fix issues${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM WORK REQUIRED - GATE NOT COMPLETE                            ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/parallel-checks-instruction.md${NC}"
+    echo -e "${RED}║  2. FIX: Build errors, lint violations, accessibility issues         ║${NC}"
+    echo -e "${RED}║  3. VERIFY: All checks pass                                          ║${NC}"
+    echo -e "${RED}║  4. RE-RUN: $0 parallel-checks $code_dir${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_smoke_test() {
@@ -511,7 +574,16 @@ cmd_smoke_test() {
 
     echo ""
     echo -e "${GREEN}✅ Instruction generated${NC}"
-    echo -e "${YELLOW}Next step: Follow the instruction to fix E2E failures${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM WORK REQUIRED - GATE NOT COMPLETE                            ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/smoke-test-instruction.md${NC}"
+    echo -e "${RED}║  2. ANALYZE: E2E test failures                                       ║${NC}"
+    echo -e "${RED}║  3. FIX: Root cause of each failure                                  ║${NC}"
+    echo -e "${RED}║  4. VERIFY: All critical paths work                                  ║${NC}"
+    echo -e "${RED}║  5. RE-RUN: $0 smoke-test $code_dir${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_ai_review() {
@@ -530,7 +602,15 @@ cmd_ai_review() {
 
     echo ""
     echo -e "${GREEN}✅ Instruction generated${NC}"
-    echo -e "${YELLOW}Next step: Follow the instruction to perform Opus review${NC}"
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️  LLM WORK REQUIRED - GATE NOT COMPLETE                            ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  1. READ: ${INSTRUCTION_OUTPUT_DIR}/ai-review-instruction.md${NC}"
+    echo -e "${RED}║  2. PERFORM: Full security and quality review with Opus 4.5          ║${NC}"
+    echo -e "${RED}║  3. FIX: All CRITICAL and HIGH issues                                ║${NC}"
+    echo -e "${RED}║  4. DOCUMENT: Review findings in JSON format                         ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 }
 
 cmd_security_scan() {
