@@ -1,10 +1,10 @@
 ---
 name: Design
-description: Design Ops v2.2 gold standard. Transform intent → validated specs → executable PRPs through 11-step invariant-enforced pipeline with multi-agent architecture. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
-version: "2.2"
+description: Design Ops v2.3 gold standard. Transform intent → validated specs → executable PRPs through 11-step invariant-enforced pipeline with multi-agent architecture. Now with Implementation Enforcement Invariants to prevent Claude Code shortcuts. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
+version: "2.3"
 ---
 
-# Design Ops v2.2 Skill
+# Design Ops v2.3 Skill
 
 **PRODUCTION GOLD STANDARD FOR AI-ASSISTED SYSTEM DESIGN**
 
@@ -80,7 +80,7 @@ The pipeline executes 5 specialized agents in coordinated sequence:
 
 ---
 
-## Why v2.2 is Production Gold Standard
+## Why v2.3 is Production Gold Standard
 
 **Invariant enforcement as hard gates**: 43 invariants (11 universal + 32 domain-specific) catch design issues at spec-time, not production. The system rejects bad specs; it doesn't attempt fixes.
 
@@ -93,6 +93,392 @@ The pipeline executes 5 specialized agents in coordinated sequence:
 **Automatic CONVENTIONS enforcement**: Extracts codebase patterns and ensures implementations match project style, not just functional requirements.
 
 **Learning loops built in**: Retrospectives after implementation extract learnings, propose new invariants, continuously improve the system.
+
+---
+
+## Implementation Enforcement Invariants (Claude Code Specific)
+
+**CRITICAL**: Claude Code is an unreliable executor. It will take shortcuts, skip verification, and claim "done" without evidence. These invariants exist because Claude WILL violate them without hard enforcement.
+
+### INV-IMPL-001: API Contract Changes → Test All Consumers
+
+**Rule:** When you modify a function's return type, interface, or API response schema, you MUST test ALL consumers of that API with Playwright.
+
+**Trigger:** Any Edit/Write to files matching:
+- `*/api/**/route.ts`
+- `*/lib/**/*.ts` (exported functions)
+- Any file defining `interface` or `type` that is exported
+
+**Enforcement:**
+```
+BEFORE claiming the change is complete:
+1. Grep for all imports of the modified file
+2. List every consumer file found
+3. For each consumer that renders UI:
+   → Run Playwright verification
+   → Paste snapshot as evidence
+4. If ANY consumer is untested → NOT DONE
+```
+
+**Example Violation:** Changed `extract-with-style-master.ts` to return `items[]` instead of `styleNumbers[]`. Did NOT test `import-photo/page.tsx` which consumes it. Page crashed.
+
+---
+
+### INV-IMPL-002: Verification Evidence Required
+
+**Rule:** "I tested it" is NOT acceptable. You must paste the actual Playwright snapshot as proof.
+
+**Enforcement:**
+```
+To claim ANY step/feature complete, you MUST include:
+
+1. The exact Playwright command:
+   mcp__playwright__browser_navigate({ url: "..." })
+   mcp__playwright__browser_snapshot({})
+
+2. The snapshot output showing expected elements
+
+3. Explicit confirmation: "Verified: [element1], [element2], [element3]"
+
+WITHOUT ALL THREE → NOT DONE
+```
+
+**Anti-pattern:** "I verified the page loads correctly" (no snapshot = lying)
+
+**Correct pattern:**
+```
+Verified /seasons/import-photo:
+- "Step 1: Upload Design Notes Photos" ✓
+- "Extract Fabrics & Styles" button ✓
+- Season Code input ✓
+[snapshot pasted above]
+```
+
+---
+
+### INV-IMPL-003: Commit Gate
+
+**Rule:** No git commit without Playwright verification evidence for ALL changed files that affect UI.
+
+**Enforcement:**
+```
+BEFORE running `git commit`:
+
+1. List all modified .tsx files
+2. For each modified UI file:
+   → What URL renders this component?
+   → Paste Playwright snapshot of that URL
+3. For each modified API/lib file:
+   → List consumers (INV-IMPL-001)
+   → Paste Playwright snapshot for each consumer
+
+If you cannot provide snapshots → DO NOT COMMIT
+```
+
+**Anti-pattern:** Committing after CLI test passes but before UI verification.
+
+---
+
+### INV-IMPL-004: No Ad-Hoc Changes Outside Pipeline
+
+**Rule:** ALL code changes must go through the Ralph pipeline. No "quick fixes" or "small changes" that bypass verification.
+
+**Trigger:** Any use of Edit/Write tool on `.ts`/`.tsx` files.
+
+**Enforcement:**
+```
+BEFORE using Edit/Write on source code, answer:
+
+1. Which Ralph step does this change belong to?
+   → If none exists: STOP. Create a step first.
+
+2. What test verifies this change?
+   → If none exists: STOP. Write the test first.
+
+3. How will you verify with Playwright?
+   → If unclear: STOP. Define verification criteria first.
+
+"Quick fix" or "small change" is NOT an excuse to skip the pipeline.
+```
+
+**Anti-pattern:** "Let me just fix this one thing real quick..." [edits file, claims done, breaks something else]
+
+---
+
+### INV-IMPL-005: Dependency Awareness
+
+**Rule:** Maintain awareness of API → Consumer relationships. When modifying an API, automatically identify and test all consumers.
+
+**Required Dependency Map (update as codebase evolves):**
+```
+/api/extract-design-notes/route.ts
+  → /seasons/import-photo/page.tsx
+
+/lib/extraction/extract-with-style-master.ts
+  → /api/extract-design-notes/route.ts
+  → /seasons/import-photo/page.tsx
+
+/lib/supabase/*.ts
+  → ALL pages using database
+
+/components/ui/*.tsx
+  → ALL pages importing that component
+```
+
+**Enforcement:**
+```
+When you modify a file:
+1. Check the dependency map above
+2. If the file is listed as a dependency source:
+   → Identify all consumers
+   → Add them to your verification checklist
+3. Update the dependency map if you discover new relationships
+```
+
+---
+
+### Enforcement Summary
+
+| Invariant | Trigger | Gate |
+|-----------|---------|------|
+| INV-IMPL-001 | API/interface change | Must test all consumers |
+| INV-IMPL-002 | Claiming "done" | Must paste snapshot evidence |
+| INV-IMPL-003 | git commit | Must have UI verification for all changes |
+| INV-IMPL-004 | Edit/Write on source | Must be part of Ralph step |
+| INV-IMPL-005 | Modifying shared code | Must identify and test consumers |
+
+**Remember:** These invariants exist because Claude Code WILL skip verification if not forced. Trust nothing. Verify everything. Show receipts.
+
+---
+
+## Component Contracts & Integration Testing
+
+**THE CORE PROBLEM:** Unit tests pass but the system is broken. Each step works in isolation but they don't integrate. This happens because there are no contracts between components and no cumulative integration tests.
+
+### Contract Definition
+
+Every module that is consumed by another module MUST define a contract:
+
+```typescript
+// CONTRACT: extract-with-style-master.ts
+// =========================================
+//
+// EXPORTS:
+//   - extractWithStyleMaster(imageBase64: string, options?) → ExtractionResult
+//
+// INPUT CONTRACT:
+//   - imageBase64: base64-encoded JPEG/PNG image
+//   - options.preferredEngine: 'gemini' | 'claude' (default: 'gemini')
+//
+// OUTPUT CONTRACT (ExtractionResult):
+//   {
+//     collection: string,
+//     theme: string | null,
+//     fabrics: ExtractedFabric[],  // MUST be array, never undefined
+//     engine: 'gemini' | 'claude'
+//   }
+//
+// ExtractedFabric CONTRACT:
+//   {
+//     name: string,               // MUST be non-empty
+//     alternateName: string | null,
+//     fabricContent: string | null,
+//     items: ExtractedItem[],     // MUST be array, never undefined
+//     generalFabricNotes: string | null
+//   }
+//
+// ExtractedItem CONTRACT:
+//   {
+//     styleId: string,            // MUST be 4-digit string
+//     dbMatchName: string | null,
+//     assignedFabric: string | null,
+//     notes: string | null,
+//     status: 'matched' | 'new_style'  // MUST be one of these
+//   }
+//
+// CONSUMERS:
+//   - /api/extract-design-notes/route.ts
+//   - /seasons/import-photo/page.tsx (via API)
+//
+// BREAKING CHANGES:
+//   - Changing items[] structure breaks import-photo page
+//   - Changing status values breaks UI rendering
+//   - Adding required fields breaks all consumers
+```
+
+**Rule:** When you modify a module, check its contract. If you change the contract, you MUST update all consumers.
+
+### Cumulative Integration Test
+
+**After EVERY step, run a cumulative integration test that covers ALL completed steps.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CUMULATIVE INTEGRATION TEST FLOW                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  After Step 1 completes:                                        │
+│    → Run integration-test-01.sh (tests step 1 in context)       │
+│                                                                 │
+│  After Step 2 completes:                                        │
+│    → Run integration-test-01.sh (regression)                    │
+│    → Run integration-test-02.sh (tests steps 1+2 together)      │
+│                                                                 │
+│  After Step 3 completes:                                        │
+│    → Run integration-test-01.sh (regression)                    │
+│    → Run integration-test-02.sh (regression)                    │
+│    → Run integration-test-03.sh (tests steps 1+2+3 together)    │
+│                                                                 │
+│  After Step N completes:                                        │
+│    → Run ALL previous integration tests (regression)            │
+│    → Run integration-test-N.sh (tests all steps together)       │
+│                                                                 │
+│  IF ANY INTEGRATION TEST FAILS → STEP IS NOT COMPLETE           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Integration Test Structure
+
+Each integration test should test the INTERFACE between components, not just the component itself:
+
+```bash
+# integration-test-03.sh
+# Tests: Photo upload → Extraction → Season creation (steps 1+2+3)
+
+# This is NOT a unit test of step 3
+# This tests that steps 1, 2, and 3 WORK TOGETHER
+
+echo "=== INTEGRATION TEST 03: Photo → Extract → Season ==="
+
+# 1. Start from clean state
+# 2. Upload photo (step 1 functionality)
+# 3. Extract fabrics (step 2 functionality)
+# 4. Verify extraction result matches CONTRACT
+# 5. Create season (step 3 functionality)
+# 6. Verify season page loads with extracted data
+# 7. Verify data flows correctly between ALL components
+
+# Playwright E2E test
+cat << 'INTEGRATION_TEST'
+{
+  "name": "Photo to Season Integration",
+  "steps": [
+    {"action": "navigate", "url": "/seasons/import-photo"},
+    {"action": "upload", "file": "test-image.jpg"},
+    {"action": "click", "element": "Extract Fabrics & Styles"},
+    {"action": "wait", "text": "Step 2: Review Extracted Fabrics"},
+    {"action": "verify", "contract": "ExtractionResult", "check": "fabrics.length > 0"},
+    {"action": "verify", "contract": "ExtractedFabric", "check": "items is array"},
+    {"action": "click", "element": "Create Season"},
+    {"action": "wait", "url_contains": "/seasons/"},
+    {"action": "verify", "element": "Season Fabrics table"},
+    {"action": "verify", "element": "fabric count matches extraction"}
+  ]
+}
+INTEGRATION_TEST
+```
+
+### E2E Smoke Test (Run After EVERY Change)
+
+**A single test that runs the ENTIRE user workflow from start to finish.**
+
+```bash
+# e2e-smoke-test.sh
+# THE ULTIMATE TEST: Does the whole system actually work?
+
+echo "=== E2E SMOKE TEST: Full Karen Workflow ==="
+
+# This test runs the COMPLETE user journey:
+# 1. Login
+# 2. Navigate to seasons
+# 3. Import from photo
+# 4. Extract fabrics (AI extraction)
+# 5. Review and confirm
+# 6. Create season
+# 7. View season page
+# 8. Edit pricing (if applicable)
+# 9. Export to AIMS
+# 10. Verify CSV output
+
+# If this test passes, the system WORKS.
+# If this test fails, something is BROKEN.
+
+# Run with Playwright:
+# mcp__playwright__browser_navigate → each step
+# mcp__playwright__browser_snapshot → verify each state
+# mcp__playwright__browser_click → user actions
+
+# MUST RUN THIS:
+# - After ANY code change
+# - Before ANY commit
+# - Before claiming ANY step complete
+```
+
+### Contract Verification in Tests
+
+Every integration test should verify contracts are maintained:
+
+```typescript
+// In test files, verify contracts explicitly:
+
+function verifyExtractionResultContract(result: unknown): void {
+  // Verify structure matches contract
+  assert(typeof result === 'object', 'Result must be object');
+  assert('fabrics' in result, 'Result must have fabrics');
+  assert(Array.isArray(result.fabrics), 'fabrics must be array');
+
+  for (const fabric of result.fabrics) {
+    verifyExtractedFabricContract(fabric);
+  }
+}
+
+function verifyExtractedFabricContract(fabric: unknown): void {
+  assert(typeof fabric === 'object', 'Fabric must be object');
+  assert(typeof fabric.name === 'string', 'name must be string');
+  assert(fabric.name.length > 0, 'name must be non-empty');
+  assert(Array.isArray(fabric.items), 'items must be array'); // THIS WOULD HAVE CAUGHT THE BUG
+
+  for (const item of fabric.items) {
+    verifyExtractedItemContract(item);
+  }
+}
+```
+
+### The Integration Testing Rule
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  MANDATORY INTEGRATION TESTING                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  1. UNIT TEST: Does this step work in isolation?                │
+│     → Run step-N test                                           │
+│                                                                 │
+│  2. CONTRACT TEST: Does output match defined contract?          │
+│     → Verify all output types match contract definitions        │
+│                                                                 │
+│  3. INTEGRATION TEST: Does this step work with previous steps?  │
+│     → Run ALL integration tests (01 through N)                  │
+│                                                                 │
+│  4. E2E SMOKE TEST: Does the full workflow still work?          │
+│     → Run complete user journey test                            │
+│                                                                 │
+│  ALL FOUR MUST PASS BEFORE STEP IS COMPLETE                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### What Would Have Caught The Bug
+
+If we had this in place:
+
+1. **Contract definition** for `ExtractedFabric` would specify `items: ExtractedItem[]`
+2. **Contract test** would verify extraction output has `items` array
+3. **Integration test** would test photo upload → extraction → UI rendering
+4. **E2E smoke test** would run full workflow and crash at import-photo page
+
+The bug would have been caught at step 3 (integration test) instead of in production demo.
 
 ---
 
@@ -1429,18 +1815,143 @@ The implement command must EXTRACT from PRP, not invent. This prevents drift bet
    | buyers.company_name | step-10.sh | test-10.sh grep |
    ```
 
+7. **Generate integration tests (CUMULATIVE):**
+
+   For each step N, generate `integration-test-NN.sh` that tests steps 1 through N working together:
+
+   ```bash
+   #!/bin/bash
+   # ==============================================================================
+   # Integration Test NN: Steps 1-N Working Together
+   # ==============================================================================
+   # Tests that all completed steps integrate correctly.
+   # This is NOT a unit test - it tests the INTERFACES between components.
+   #
+   # Components tested:
+   #   - Step 1: [component]
+   #   - Step 2: [component]
+   #   - ...
+   #   - Step N: [component]
+   #
+   # Contracts verified:
+   #   - [Contract 1]: [API] → [Consumer]
+   #   - [Contract 2]: [Module] → [Page]
+   # ==============================================================================
+
+   echo "=== INTEGRATION TEST NN: Steps 1-N ==="
+
+   # Test the full flow through all completed components
+   # Use Playwright to navigate through the actual UI
+   # Verify data flows correctly between ALL components
+
+   cat << 'INTEGRATION_VERIFY'
+   {
+     "test": "integration-NN",
+     "steps_covered": [1, 2, ..., N],
+     "workflow": [
+       {"action": "navigate", "url": "/start"},
+       {"action": "perform_step_1", "verify": "output matches contract"},
+       {"action": "perform_step_2", "verify": "receives step 1 output correctly"},
+       ...
+       {"action": "perform_step_N", "verify": "full flow completes"}
+     ],
+     "contracts_verified": ["Contract1", "Contract2"]
+   }
+   INTEGRATION_VERIFY
+   ```
+
+8. **Generate E2E smoke test:**
+
+   Generate ONE `e2e-smoke-test.sh` that runs the complete user workflow:
+
+   ```bash
+   #!/bin/bash
+   # ==============================================================================
+   # E2E Smoke Test: Full User Workflow
+   # ==============================================================================
+   # THE ULTIMATE TEST: Does the whole system actually work?
+   #
+   # This test runs the COMPLETE user journey from start to finish.
+   # If this test passes, the system WORKS.
+   # If this test fails, something is BROKEN.
+   #
+   # User Journey (from PRP):
+   #   1. [First user action]
+   #   2. [Second user action]
+   #   ...
+   #   N. [Final user action - expected outcome]
+   # ==============================================================================
+
+   echo "=== E2E SMOKE TEST: Full Workflow ==="
+
+   # Run complete user journey with Playwright
+   # Every step must succeed for the test to pass
+
+   cat << 'E2E_WORKFLOW'
+   {
+     "test": "e2e-smoke",
+     "description": "Complete user workflow from PRP",
+     "steps": [
+       {"action": "login", "verify": "dashboard loads"},
+       {"action": "navigate_to_feature", "verify": "feature page loads"},
+       {"action": "perform_main_task", "verify": "task completes"},
+       {"action": "verify_result", "verify": "expected outcome achieved"},
+       {"action": "export_or_save", "verify": "data persisted correctly"}
+     ],
+     "success_criteria": "All steps complete without error"
+   }
+   E2E_WORKFLOW
+   ```
+
+9. **Generate contract definitions:**
+
+   For each API/module, generate `contracts/[module]-contract.ts`:
+
+   ```typescript
+   // ==============================================================================
+   // Contract: [module-name]
+   // ==============================================================================
+   // This contract defines the interface between [producer] and [consumers].
+   // Breaking this contract will break: [list of consumers]
+   //
+   // CONSUMERS:
+   //   - [consumer1.tsx]
+   //   - [consumer2.ts]
+   // ==============================================================================
+
+   export interface [ModuleName]Input {
+     // Input contract - what this module expects
+   }
+
+   export interface [ModuleName]Output {
+     // Output contract - what this module returns
+     // ALL FIELDS ARE REQUIRED unless marked optional
+   }
+
+   // Contract verification function
+   export function verify[ModuleName]Contract(output: unknown): output is [ModuleName]Output {
+     // Runtime verification that output matches contract
+     // Used in integration tests
+   }
+   ```
+
 **Output:**
 ```
 Generated Ralph implementation:
 ├── ralph.sh                    # Runner script
 ├── ralph-results.json          # Progress tracker
-└── ralph-steps/
-    ├── step-01.sh ... step-NN.sh  (with invariant headers)
-    ├── test-01.sh ... test-NN.sh  (with PRP verbatim sections)
-    ├── gate-1.sh ... gate-N.sh    (with phase aggregation)
-    └── PRP-COVERAGE.md            (full traceability)
+├── ralph-tests/
+│   ├── test-01.sh ... test-NN.sh       (unit tests)
+│   ├── integration-test-01.sh ...      (cumulative integration tests)
+│   ├── e2e-smoke-test.sh               (full workflow test)
+│   ├── gate-1.sh ... gate-N.sh         (phase gates)
+│   └── contracts/                      (contract definitions)
+│       ├── extraction-contract.ts
+│       ├── season-api-contract.ts
+│       └── ...
+└── PRP-COVERAGE.md                     (full traceability)
 
-Total: NN steps, N gates
+Total: NN steps, NN unit tests, NN integration tests, 1 E2E test, N gates
 Coverage: 100% of PRP deliverables
 Invariants: All referenced in headers
 PRP Criteria: All mapped to tests
@@ -1753,6 +2264,35 @@ The schema mismatches we experienced (fabric_id vs aims_code) happened because R
 
 ---
 
+## STEP 0: IMPLEMENTATION INVARIANT PRE-CHECK (MANDATORY)
+
+**Before ANY code changes, verify these invariants are being followed:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  INV-IMPL PRE-CHECK - BLOCKING GATE                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  □ INV-IMPL-004: Is this change part of a Ralph step?           │
+│    → If editing code outside a defined step: STOP               │
+│                                                                 │
+│  □ INV-IMPL-001: Does this step modify any API/interface?       │
+│    → If yes: List all consumer files that must be tested        │
+│                                                                 │
+│  □ INV-IMPL-002: How will you provide verification evidence?    │
+│    → Define the Playwright commands you will run                │
+│    → Define the elements you will check in snapshot             │
+│                                                                 │
+│  □ INV-IMPL-005: Check dependency map for affected consumers    │
+│    → Add all consumers to verification checklist                │
+│                                                                 │
+│  IF ANY CHECK IS UNCLEAR → DO NOT PROCEED                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## STEP 1: LOCATE AND LOAD STATE
 
 ```
@@ -1876,19 +2416,98 @@ Record failure:
 
 Go to **STEP 3: HANDLE FAILURE**
 
-### 2.5 UPDATE STATE (SUCCESS)
+### 2.5 UPDATE STATE (SUCCESS) - REQUIRES EVIDENCE (INV-IMPL-002)
+
+**BEFORE updating state, you MUST have provided verification evidence.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  EVIDENCE CHECKLIST - ALL REQUIRED TO CLAIM STEP COMPLETE       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ✓ Playwright snapshot was captured and shown in conversation   │
+│                                                                 │
+│  ✓ Expected elements were explicitly listed and confirmed:      │
+│    "Verified: [element1] ✓, [element2] ✓, [element3] ✓"         │
+│                                                                 │
+│  ✓ If API/interface was modified (INV-IMPL-001):                │
+│    → All consumer pages were tested with Playwright             │
+│    → Snapshots for each consumer were shown                     │
+│                                                                 │
+│  IF ANY EVIDENCE IS MISSING → STEP IS NOT COMPLETE              │
+│  DO NOT UPDATE STATE WITHOUT EVIDENCE                           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 Update `ralph-state.json`:
 ```json
 {
   "steps": {
-    "{step_num}": { "status": "passed", "attempts": {attempts} }
+    "{step_num}": {
+      "status": "passed",
+      "attempts": {attempts},
+      "evidence": {
+        "playwright_url": "{url tested}",
+        "elements_verified": ["{element1}", "{element2}"],
+        "consumers_tested": ["{consumer1}", "{consumer2}"] // if API change
+      }
+    }
   },
   "current_step": {step_num + 1}
 }
 ```
 
-### 2.6 CHECK FOR GATE
+### 2.6 RUN CUMULATIVE INTEGRATION TESTS (MANDATORY)
+
+**After unit test passes, run ALL integration tests up to current step.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CUMULATIVE INTEGRATION TEST - BLOCKING GATE                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  FOR i FROM 1 TO current_step:                                  │
+│    Run integration-test-{i}.sh                                  │
+│    IF FAIL → Go to STEP 3: HANDLE FAILURE                       │
+│                                                                 │
+│  ALL integration tests must pass before proceeding.             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+```bash
+# Run all integration tests up to current step
+for i in $(seq 1 {step_num}); do
+  echo "Running integration-test-$(printf %02d $i).sh..."
+  ./ralph-tests/integration-test-$(printf %02d $i).sh || FAIL=1
+done
+
+if [ $FAIL -eq 1 ]; then
+  echo "INTEGRATION TEST FAILED - Step is NOT complete"
+  exit 1
+fi
+```
+
+**Why this matters:** Unit test passing means the step works in isolation. Integration test passing means it works WITH all previous steps. Both must pass.
+
+### 2.7 RUN E2E SMOKE TEST (MANDATORY)
+
+**After integration tests pass, run the full E2E smoke test.**
+
+```bash
+# Run E2E smoke test - the ultimate "does it actually work" check
+./ralph-tests/e2e-smoke-test.sh
+
+if [ $? -ne 0 ]; then
+  echo "E2E SMOKE TEST FAILED - Something broke the full workflow"
+  exit 1
+fi
+```
+
+**The E2E smoke test runs the complete user journey.** If it fails, something you changed broke the overall system, even if unit and integration tests passed.
+
+### 2.8 CHECK FOR GATE
 
 If `ralph-steps/gate-{N}.sh` exists for completed phase:
 
@@ -1899,7 +2518,7 @@ Bash: ./ralph-steps/gate-{N}.sh
 - **Default mode**: Ask user "Gate {N} passed. Continue? [Y/n]"
 - **Dangerous mode**: Auto-continue
 
-### 2.7 CONTINUE LOOP
+### 2.9 CONTINUE LOOP
 
 Go to next step_num
 
@@ -1994,17 +2613,186 @@ Dev server running at http://localhost:{port}
 
 ---
 
+## STEP 5: COMMIT GATE (INV-IMPL-003) - BEFORE ANY GIT COMMIT
+
+**This gate is MANDATORY before running `git commit`. No exceptions.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  COMMIT GATE - BLOCKING CHECKPOINT                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  STEP 5.1: List all modified files                              │
+│  ─────────────────────────────────────────────────────────────  │
+│  Run: git status                                                │
+│  Identify: ALL .ts/.tsx files that were modified                │
+│                                                                 │
+│  STEP 5.2: For each modified UI file (.tsx)                     │
+│  ─────────────────────────────────────────────────────────────  │
+│  □ What URL renders this component?                             │
+│  □ Did you run Playwright on that URL?                          │
+│  □ Did you paste the snapshot as evidence?                      │
+│  □ Did you list elements verified?                              │
+│                                                                 │
+│  STEP 5.3: For each modified API/lib file (.ts)                 │
+│  ─────────────────────────────────────────────────────────────  │
+│  □ List all consumers of this file (grep for imports)           │
+│  □ For each consumer that renders UI:                           │
+│    → Did you run Playwright on that consumer's URL?             │
+│    → Did you paste the snapshot as evidence?                    │
+│                                                                 │
+│  STEP 5.4: Evidence summary                                     │
+│  ─────────────────────────────────────────────────────────────  │
+│  Before committing, explicitly state:                           │
+│                                                                 │
+│  "COMMIT EVIDENCE:                                              │
+│   - Modified: [file1.tsx, file2.ts, ...]                        │
+│   - URLs tested: [/path1, /path2, ...]                          │
+│   - Elements verified: [elem1, elem2, ...]                      │
+│   - Consumers tested: [consumer1, consumer2, ...] (if API)      │
+│   - All Playwright snapshots shown above: YES"                  │
+│                                                                 │
+│  IF YOU CANNOT FILL THIS IN → DO NOT COMMIT                     │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Anti-patterns that trigger this gate:**
+- "Let me commit this real quick" → NO. Show evidence first.
+- "The CLI test passed" → NOT ENOUGH. UI verification required.
+- "I tested it earlier" → Show the snapshot NOW or don't commit.
+
+---
+
+## STEP 6: INTEGRATION TESTING (INV-IMPL-001) - AFTER EACH STEP
+
+**Integration tests run AFTER unit tests pass, BEFORE claiming step complete.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  INTEGRATION TEST FLOW                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Unit Test (step test)                                          │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────┐                                                │
+│  │ PASS?       │──NO──► Fix code, retry unit test               │
+│  └─────────────┘                                                │
+│       │ YES                                                     │
+│       ▼                                                         │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ INTEGRATION CHECK: Did this step modify shared code?    │    │
+│  │                                                         │    │
+│  │ Shared code = APIs, interfaces, lib functions, types    │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│       │                                                         │
+│       ├──NO──► Skip to Step Complete                            │
+│       │                                                         │
+│       ▼ YES                                                     │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ FIND ALL CONSUMERS:                                     │    │
+│  │                                                         │    │
+│  │ grep -r "import.*{modified_file}" --include="*.tsx"     │    │
+│  │                                                         │    │
+│  │ List every file that imports the modified code          │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ FOR EACH CONSUMER:                                      │    │
+│  │                                                         │    │
+│  │ 1. What URL does this consumer render?                  │    │
+│  │ 2. Run Playwright: navigate to URL                      │    │
+│  │ 3. Run Playwright: capture snapshot                     │    │
+│  │ 4. Verify: page loads without error                     │    │
+│  │ 5. Verify: expected elements present                    │    │
+│  │                                                         │    │
+│  │ If ANY consumer fails → FIX before claiming complete    │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│       │                                                         │
+│       ▼                                                         │
+│  Step Complete (with evidence for all consumers)                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Example - What Should Have Happened:**
+
+```
+Step: Update extract-with-style-master.ts (change items[] format)
+
+Unit Test: CLI extraction test
+  → PASS: JSON output looks correct
+
+Integration Check: Is this shared code?
+  → YES: It's a lib function used by API routes
+
+Find Consumers:
+  → grep -r "extract-with-style-master" --include="*.ts" --include="*.tsx"
+  → Found: /api/extract-design-notes/route.ts
+  → Found: (route is consumed by) /seasons/import-photo/page.tsx
+
+Integration Test Each Consumer:
+  → Navigate to /seasons/import-photo
+  → Upload image, click Extract
+  → Capture snapshot
+  → Verify: "Step 2: Review Extracted Fabrics" appears
+  → Verify: Fabric cards render with style badges
+  → FAIL: Page crashed - items.map is not a function
+
+Fix: Update page.tsx to use new items[] format
+Re-run Integration Test: PASS
+
+NOW step is complete.
+```
+
+**The Rule:** Unit test passing is NOT enough. If you changed shared code, you MUST integration test all consumers with Playwright.
+
+---
+
 ## QUICK REFERENCE
 
 | Situation | Action |
 |-----------|--------|
-| Step script fails | Read error, fix with Edit, retry |
-| Test script fails | Read error, fix source code, retry |
+| Unit test fails | Read error, fix source code, retry |
+| Integration test fails | Something broke between components - check contracts |
+| E2E smoke test fails | Full workflow broken - trace through each step |
 | Playwright check fails | Read snapshot, fix UI code, retry |
 | 3 failures (default) | Stop, wait for human |
 | 3 failures (dangerous) | Regenerate from PRP |
 | Gate reached (default) | Ask approval |
 | Gate reached (dangerous) | Auto-continue |
+| **API/lib modified** | **Find consumers, Playwright test each** |
+| **Claiming step done** | **Must have snapshot evidence** |
+| **Before git commit** | **Run COMMIT GATE checklist** |
+| **Contract change** | **Update all consumers, run integration tests** |
+
+## Test Hierarchy (ALL MUST PASS)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  1. UNIT TEST (test-NN.sh)                                      │
+│     Does this step work in isolation?                           │
+│     └─► PASS required to continue                               │
+│                                                                 │
+│  2. CONTRACT VERIFICATION                                       │
+│     Does output match defined contract?                         │
+│     └─► PASS required to continue                               │
+│                                                                 │
+│  3. INTEGRATION TESTS (integration-test-01..NN.sh)              │
+│     Do all completed steps work TOGETHER?                       │
+│     └─► ALL must PASS to continue                               │
+│                                                                 │
+│  4. E2E SMOKE TEST (e2e-smoke-test.sh)                          │
+│     Does the complete user workflow still work?                 │
+│     └─► PASS required to claim step complete                    │
+│                                                                 │
+│  ALL FOUR LEVELS MUST PASS BEFORE STEP IS COMPLETE              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -2684,6 +3472,7 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3 | 2026-01-29 | **Implementation Enforcement Invariants** - Added INV-IMPL-001 through INV-IMPL-005 to prevent Claude Code shortcuts. Added mandatory integration testing after API changes. Added commit gate with evidence requirements. Added explicit "show your work" proof requirements for Playwright verification. |
 | 2.2 | 2026-01-22 | Added `/design spec` for journey-to-spec generation, unified workflow |
 | 2.1 | 2026-01-20 | Ralph Methodology for atomic implementation (implement, run, gate, status commands) |
 | 2.0 | 2026-01-19 | Multi-agent architecture, continuous validation, examples library, thinking levels |
@@ -2719,9 +3508,10 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 ---
 
-*Skill version: 2.2*
-*Last updated: 2026-01-22*
+*Skill version: 2.3*
+*Last updated: 2026-01-29*
 *Enforcement tools: validator.sh v1.1, spec-to-prp.sh v1.1, prp-checker.sh v1.0*
 *Multi-agent system: spec-analyst, validator, prp-generator, reviewer, retrospective*
 *Continuous validation: watch-mode, continuous-validator, validation-dashboard*
 *Implementation: Ralph Methodology v1.0*
+*Implementation Enforcement: INV-IMPL-001 through INV-IMPL-005 (Claude Code anti-shortcut invariants)*
