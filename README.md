@@ -1,8 +1,8 @@
-# Design Ops v2.2
+# Design Ops v3.0
 
 The production gold standard for AI-assisted system design. Transforms human intent into validated, executable specifications and PRPs through automated invariant enforcement.
 
-**Version**: 2.2 | **Status**: Production Gold Standard | **License**: MIT
+**Version**: 3.0 (Agent-Driven) | **Status**: Production | **License**: MIT
 
 ---
 
@@ -10,33 +10,39 @@ The production gold standard for AI-assisted system design. Transforms human int
 
 **Want to go from a validated spec to production-ready code automatically?**
 
-👉 **[QUICKSTART-RALPH.md](QUICKSTART-RALPH.md)** - 5-minute guide to run the full pipeline
+👉 **[ralph.md](ralph.md)** - Complete RALPH documentation
 
 ```bash
 # Install
 git clone https://github.com/saselvan/design-ops-plugin ~/.claude/design-ops
-chmod +x ~/.claude/design-ops/enforcement/*.py
+cd ~/.claude/design-ops
+chmod +x enforcement/*.sh enforcement/lib/*.sh
 
-# Run on your spec (with parallel sub-agent support)
-cd ~/projects/my-app
-python ~/.claude/design-ops/enforcement/ralph-orchestrator-v3-parallel.py specs/feature.md
+# In Claude Code
+"Run RALPH on specs/feature.md"
 
-# Load in Claude Code and watch it run
 # Result: Production-ready code in 12 automated gates
-# Speedup: 39% faster with parallel sub-agents (9-12 concurrent agents)
+# Time: 30-45 minutes with full automation
 ```
 
 **What RALPH Does:**
 - ✅ Generates 30-40 unit tests from your spec
-- ✅ Implements code using TDD (RED → GREEN → REFACTOR)
-- ✅ Runs security scans (OWASP Top 10)
-- ✅ Validates accessibility (WCAG 2.1 AA)
-- ✅ Tests performance (Lighthouse audit)
-- ✅ Runs E2E smoke tests
-- ✅ AI code review for quality/security
-- ✅ **NEW:** Parallel sub-agents for 39% faster execution (15-25 min vs 20-30 min)
+- ✅ Implements code using **progressive integration** (ONE test at a time)
+- ✅ Catches regressions immediately (not at the end)
+- ✅ Automated validation loops (Edit→Commit→Log→Re-check)
+- ✅ Playwright MCP browser verification for UI tests
+- ✅ Full audit trail (every edit logged + committed)
+- ✅ Parallel sub-agents for independent checks
+- ✅ **FULLY AUTOMATED** - no manual steps required
 
-**12 Gates:** STRESS_TEST → VALIDATE → GENERATE_PRP → CHECK_PRP → GENERATE_TESTS → TEST_VALIDATION → PREFLIGHT → IMPLEMENT_TDD → PARALLEL_CHECKS → VISUAL_REGRESSION → SMOKE_TEST → AI_CODE_REVIEW
+**12 Gates:** STRESS_TEST → VALIDATE → GENERATE_PRP → CHECK_PRP → GENERATE_TESTS → TEST_VALIDATION → PREFLIGHT → IMPLEMENT_TDD (N sub-tasks) → PARALLEL_CHECKS → VISUAL_REGRESSION → SMOKE_TEST → AI_CODE_REVIEW
+
+**v3.0 Changes:**
+- Agent-driven orchestration (no Python scripts)
+- Progressive integration (prevents integration test failures)
+- Forced instruction execution (no more skipping)
+- Dynamic file naming (parallel runs supported)
+- State file tracking (full audit trail)
 
 ---
 
@@ -56,47 +62,55 @@ python ~/.claude/design-ops/enforcement/ralph-orchestrator-v3-parallel.py specs/
 
 ---
 
-## Installation (Skill Mode)
+## Installation
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/saselvan/design-ops-plugin.git ~/tools/design-ops
-cd ~/tools/design-ops
-```
-
-### 2. Make scripts executable
+### Option 1: Global Installation (Recommended)
 
 ```bash
-chmod +x enforcement/*.sh tools/*.sh
+# Clone repo
+git clone https://github.com/saselvan/design-ops-plugin.git ~/.claude/design-ops
+cd ~/.claude/design-ops
+
+# Make scripts executable
+chmod +x enforcement/*.sh enforcement/lib/*.sh
+
+# Symlink RALPH skill to Claude Code
+mkdir -p ~/.claude/skills
+ln -s ~/.claude/design-ops/ralph.md ~/.claude/skills/ralph.md
 ```
 
-### 3. Verify installation
+**On new computer**: Same commands. Repo stays in sync via git pull.
+
+### Option 2: Project-Specific (Git Submodule)
 
 ```bash
-cd test-integration && ./real-project-test.sh
-# Should show: ✅ ALL INTEGRATION TESTS PASSED! (18/18)
+cd ~/projects/my-app
+
+# Add as submodule
+git submodule add https://github.com/saselvan/design-ops-plugin.git .design-ops
+
+# Make executable
+chmod +x .design-ops/enforcement/*.sh .design-ops/enforcement/lib/*.sh
+
+# Add to .claude/settings.json
+echo '{"skills": [".design-ops/ralph.md"]}' > .claude/settings.json
 ```
 
-### 4. Add to Claude Code
-
-**Option A: Project-level** (recommended)
-
-Create `.claude/settings.json` in your project:
-
-```json
-{
-  "skills": ["~/tools/design-ops/design.md"]
-}
+**On new computer**:
+```bash
+git clone <your-repo>
+git submodule update --init --recursive
 ```
 
-**Option B: Reference in CLAUDE.md**
+### Verify Installation
 
-Add to your project's `CLAUDE.md`:
+```bash
+# Check scripts are executable
+ls -l ~/.claude/design-ops/enforcement/*.sh
+ls -l ~/.claude/design-ops/enforcement/lib/*.sh
 
-```markdown
-## Skills
-- ~/tools/design-ops/design.md
+# Check skill is linked
+ls -l ~/.claude/skills/ralph.md
 ```
 
 ### 5. Use it

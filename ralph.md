@@ -1,242 +1,342 @@
 ---
 name: ralph
-description: RALPH Pipeline - Automated validation from spec to production-ready code
+description: RALPH (Rigor At Launch Phase Handoff) - Automated spec-to-production pipeline with TDD and progressive integration
 ---
 
-# RALPH Pipeline Skill
+# RALPH: Automated Spec-to-Production Pipeline
 
-**RALPH** = **R**igor **A**t **L**aunch **P**hase **H**andoff
+**Version**: 3.0 (Agent-Driven Orchestration)
+**Status**: Production
 
-Automated 12-gate validation pipeline that takes a spec through to production-ready code with automated testing, security checks, and quality validation.
+---
 
-## When to Use
+## What is RALPH?
 
-Use this skill when you have a validated specification and want to:
-- Generate tests automatically
-- Implement code with TDD
-- Run automated security/quality/performance checks
-- Get production-ready code with full audit trail
+RALPH is an intelligent orchestrator that transforms validated specifications into production-ready code through:
 
-## Prerequisites
+- **Progressive Integration**: ONE test at a time, catching regressions immediately
+- **Automated Validation Loops**: Edit→Commit→Log→Re-check until clean
+- **Playwright Browser Verification**: Automated UI testing with MCP tools
+- **Full Audit Trail**: Every edit logged with git commits + state file
 
-1. **Validated spec file** - Must pass stress-test and validate gates first
-2. **Git repository** - All progress tracked via commits
-3. **Project structure** - Standard layout with specs/, PRPs/, src/, tests/
+**Result**: 30-45 minutes from spec to production-ready code with full test coverage.
 
-## Usage
+---
 
-### Step 1: Generate Tasks
+## Quick Start
 
-```bash
-python ~/.claude/design-ops/enforcement/ralph-orchestrator.py <spec-file>
-```
-
-This creates `.ralph/tasks.json` with all 12 gates.
-
-### Step 2: Load Tasks into Claude Code
-
-Once you run the orchestrator, tell me:
-
-"Load the RALPH tasks and create them"
-
-I will:
-1. Read `.ralph/task-creation-instructions.md`
-2. Create all 12 tasks using TaskCreate
-3. Set up dependencies with TaskUpdate
-4. Verify with TaskList
-
-### Step 3: Execute Pipeline
-
-Tasks auto-execute as dependencies complete. Monitor with `/tasks`.
-
-## The 12 Gates
-
-| Gate | What It Does | Output |
-|------|--------------|--------|
-| **1. STRESS_TEST** | Check spec completeness (6 areas) | Validated spec |
-| **2. VALIDATE + SECURITY_SCAN** | 43 invariants + security checks | Secure spec |
-| **3. GENERATE_PRP** | Extract Product Requirements Prompt | PRP file |
-| **4. CHECK_PRP** | Validate PRP structure | Validated PRP |
-| **5. GENERATE_TESTS** | Create 30-40 unit tests | Test suite |
-| **5.5. TEST_VALIDATION** | Validate test quality | Quality tests |
-| **5.75. PREFLIGHT** | Environment checks | Ready environment |
-| **6. IMPLEMENT_TDD** | Write code to pass tests | Working code |
-| **6.5. PARALLEL_CHECKS** | Build/Lint/Integration/A11y | Quality code |
-| **6.9. VISUAL_REGRESSION** | Screenshot testing | UI validated |
-| **7. SMOKE_TEST** | E2E critical paths | Tested system |
-| **8. AI_CODE_REVIEW** | Security/quality/performance | Production ready |
-
-## Task Dependencies (DAG)
-
-```
-1 → 2 → 3 → 4 → 5 → 5.5 → 5.75 → 6 → 6.5 → 6.9 → 7 → 8
-```
-
-Each task auto-unblocks the next when it completes successfully.
-
-## Stateless Context Pattern
-
-Each task sees ONLY:
-- Latest committed file content
-- Errors from last run
-- Recommended fixes
-- **NO full conversation history**
-
-This ensures deterministic, reproducible execution.
-
-## ASSESS → FIX → COMMIT → VALIDATE Loop
-
-Every task follows this pattern:
-
-1. **ASSESS**: Run validation command
-2. **IF PASS**: Mark complete, unblock next task
-3. **IF FAIL**:
-   - Read instruction file
-   - **FIX**: Edit files to address issues
-   - **COMMIT**: Git commit the fix
-   - **VALIDATE**: Re-run validation
-   - **LOOP**: Repeat until PASS
-
-## Example: Full Workflow
+### 1. Ensure Design Ops is Installed
 
 ```bash
-# 1. Generate tasks
-python ~/.claude/design-ops/enforcement/ralph-orchestrator.py specs/S-001-login.md
+# Clone if not already
+git clone https://github.com/saselvan/design-ops-plugin.git ~/.claude/design-ops
+cd ~/.claude/design-ops
 
-# 2. In Claude Code:
-# "Load the RALPH tasks and create them"
-
-# 3. Monitor progress:
-# /tasks
-
-# 4. When complete:
-# - All 12 gates passed
-# - Code is production-ready
-# - Full audit trail in git history
-# - Telemetry in .ralph/metrics/
+# Make scripts executable
+chmod +x enforcement/*.sh enforcement/lib/*.sh
 ```
 
-## Git Commit History
+### 2. Run RALPH on Your Spec
 
-After successful pipeline, you'll have commits like:
+In Claude Code:
 
 ```
-ralph: GATE 1 - fix completeness gaps
-ralph: GATE 2 - fix invariant violations and security issues
-ralph: GATE 3 - fix PRP extraction issues
-ralph: GATE 4 - fix PRP structure
-ralph: GATE 5 - generate test suite
-ralph: GATE 5.5 - fix test suite quality
-ralph: GATE 5.75 - fix environment setup
-ralph: GATE 6 - pass test: test_user_login
-ralph: GATE 6 - pass test: test_invalid_credentials
-...
-ralph: GATE 6.5 - fix parallel check failures
-ralph: GATE 6.9 - fix visual regression
-ralph: GATE 7 - fix smoke test failures
-ralph: GATE 8 - fix security/quality/performance issues
+Run RALPH on specs/auth-feature.md
 ```
 
-Every change is tracked and auditable.
+That's it. RALPH will:
+1. Analyze your spec/PRP
+2. Count test files
+3. Create 30-50 tasks automatically
+4. Execute with full automation (no manual steps)
 
-## Telemetry
+### 3. Monitor Progress
 
-Each gate writes metrics to `.ralph/metrics/gate-N.json`:
+```
+/tasks
+```
 
+Watch gates execute sequentially with progressive integration.
+
+---
+
+## What RALPH Does
+
+### The 12 Gates
+
+**Pipeline**: Spec → Validate → PRP → Tests → Implement → Verify → Deploy
+
+```
+GATE 1: STRESS_TEST          Check spec completeness
+GATE 2: VALIDATE             43 invariants + security (parallel)
+GATE 3: GENERATE_PRP         Extract requirements
+GATE 4: CHECK_PRP            Validate PRP structure
+GATE 5: GENERATE_TESTS       Create 30-40 unit tests
+GATE 5.5: TEST_VALIDATION    Verify tests fail correctly (parallel)
+GATE 5.75: PREFLIGHT         Environment ready check
+GATE 6: IMPLEMENT_TDD        ONE test at a time (N sub-tasks)
+GATE 6.5: PARALLEL_CHECKS    Build + Lint + Integration + A11y
+GATE 6.9: VISUAL_REGRESSION  Playwright screenshot testing
+GATE 7: SMOKE_TEST           E2E critical paths
+GATE 8: AI_CODE_REVIEW       Security + performance audit (parallel)
+```
+
+### Progressive Integration (GATE 6)
+
+Instead of implementing all 30 tests at once and discovering integration failures at the end:
+
+**OLD (broken) approach:**
+```
+Implement all 30 tests
+Run all tests
+❌ Test 3 and Test 17 fail together (shared state conflict)
+Fix and repeat
+```
+
+**NEW (RALPH) approach:**
+```
+Implement test 1 → Run test 1 → GREEN ✅ → Commit
+Implement test 2 → Run test 2 → GREEN ✅ → Run tests 1+2 → GREEN ✅ → Commit
+Implement test 3 → Run test 3 → GREEN ✅ → Run tests 1+2+3 → Test 2 FAILS ❌
+  → FIX test 3 code (regression detected!)
+  → Re-run tests 1+2+3 → ALL GREEN ✅ → Commit
+Implement test 4 → ...
+```
+
+**Catches regressions immediately** instead of at the end.
+
+### Edit→Commit→Log→Re-check Loop
+
+Every fix gets individual tracking:
+
+```
+GATE 2: VALIDATE
+  Run validate → 3 violations found
+
+  Violation 1: "Ambiguous requirement in auth section"
+  → Edit spec.md
+  → Commit: "ralph: GATE 2 attempt 1 - fix ambiguity in auth section"
+  → Log to state file: {gate: 2, attempt: 1, action: "fix_ambiguity", commit: "abc123"}
+  → Re-run validate → 2 violations remain
+
+  Violation 2: "Missing success criteria"
+  → Edit spec.md
+  → Commit: "ralph: GATE 2 attempt 2 - add success criteria"
+  → Log to state file: {gate: 2, attempt: 2, action: "add_success_criteria", commit: "def456"}
+  → Re-run validate → 1 violation remains
+
+  Violation 3: "Edge cases not defined"
+  → Edit spec.md
+  → Commit: "ralph: GATE 2 attempt 3 - define edge cases"
+  → Log to state file: {gate: 2, attempt: 3, action: "define_edge_cases", commit: "ghi789"}
+  → Re-run validate → PASS (0 violations)
+
+  Final commit: "ralph: GATE 2 complete"
+```
+
+**Benefits:**
+- Atomic commits (easy rollback)
+- Full audit trail (what was fixed when)
+- Learning data (which violations are common)
+
+### Playwright MCP Verification (Selective)
+
+For UI tests, RALPH automatically:
+
+```javascript
+// Detects UI test by parsing imports
+test_content = "import { AuthPage } from '@/app/auth/page'"
+→ This touches src/app/ → UI test detected
+
+// Adds Playwright verification steps
+1. Start dev server (if not running)
+   Bash: curl http://localhost:3000 || npm run dev &
+
+2. Navigate to route
+   mcp__playwright__browser_navigate({ url: "http://localhost:3000/auth" })
+
+3. Take snapshot
+   mcp__playwright__browser_snapshot({})
+
+4. Verify UI elements
+   - Check heading "Sign In" exists
+   - Check button "Continue" exists
+   - Check form fields present
+
+5. If verification fails
+   → Fix component/page code
+   → Commit fix
+   → Re-run verification
+```
+
+**Only runs for UI tests** (not every test).
+
+---
+
+## Installation Across Computers
+
+### Option 1: Clone + Symlink (Recommended)
+
+```bash
+# Clone repo
+git clone https://github.com/saselvan/design-ops-plugin.git ~/.claude/design-ops
+
+# Make scripts executable
+cd ~/.claude/design-ops
+chmod +x enforcement/*.sh enforcement/lib/*.sh
+
+# Symlink skill to Claude Code
+mkdir -p ~/.claude/skills
+ln -s ~/.claude/design-ops/ralph.md ~/.claude/skills/ralph.md
+```
+
+**On new computer**: Same commands. Repo stays in sync via git.
+
+### Option 2: Git Submodule (for project-specific)
+
+```bash
+cd ~/projects/my-app
+
+# Add as submodule
+git submodule add https://github.com/saselvan/design-ops-plugin.git .design-ops
+
+# Make executable
+chmod +x .design-ops/enforcement/*.sh .design-ops/enforcement/lib/*.sh
+
+# Add to .claude/settings.json
+echo '{"skills": [".design-ops/ralph.md"]}' > .claude/settings.json
+```
+
+**On new computer**:
+```bash
+git clone <your-repo>
+git submodule update --init --recursive
+```
+
+### Option 3: Global Installation
+
+```bash
+# Install to /usr/local
+sudo git clone https://github.com/saselvan/design-ops-plugin.git /usr/local/lib/design-ops
+sudo chmod +x /usr/local/lib/design-ops/enforcement/*.sh /usr/local/lib/design-ops/enforcement/lib/*.sh
+
+# Symlink skill
+ln -s /usr/local/lib/design-ops/ralph.md ~/.claude/skills/ralph.md
+```
+
+**Updates**:
+```bash
+cd /usr/local/lib/design-ops
+sudo git pull
+```
+
+---
+
+## Usage Patterns
+
+### Basic Usage
+
+```
+Run RALPH on specs/feature.md
+```
+
+### Check RALPH Status
+
+```
+Show me the RALPH state for auth-feature
+```
+
+I'll read `.ralph/state/auth-feature-state.json` and show current gate, attempts, commits.
+
+### Resume After Failure
+
+```
+Resume RALPH for auth-feature from current gate
+```
+
+I'll check state file, see which gate failed, resume from there.
+
+### Parallel Runs
+
+```
+Run RALPH on specs/auth-feature.md
+Run RALPH on specs/payment-api.md
+```
+
+Both execute simultaneously with isolated state files.
+
+---
+
+## State File Tracking
+
+Every RALPH run creates a state file:
+
+**Location**: `.ralph/state/{spec_name}-state.json`
+
+**Example**:
 ```json
 {
-  "gate": "1",
-  "name": "STRESS_TEST",
-  "status": "PASS",
-  "iterations": 2,
-  "start_time": "2026-01-28T10:00:00Z",
-  "end_time": "2026-01-28T10:05:23Z",
-  "duration_seconds": 323,
-  "errors": [],
-  "fixes_applied": [
-    "Added edge cases section",
-    "Clarified acceptance criteria"
+  "spec": "specs/auth-feature.md",
+  "prp": "PRPs/auth-feature-prp.md",
+  "started": "2026-01-29T18:23:45Z",
+  "current_gate": "GATE 6.3",
+
+  "gates": [
+    {
+      "gate": "GATE 2: VALIDATE",
+      "started": "2026-01-29T18:24:12Z",
+      "attempts": [
+        {
+          "attempt": 1,
+          "timestamp": "2026-01-29T18:24:30Z",
+          "action": "fix_ambiguity_in_auth_section",
+          "files_edited": ["specs/auth-feature.md"],
+          "commit_sha": "abc1234"
+        }
+      ],
+      "completed": "2026-01-29T18:26:00Z",
+      "status": "pass"
+    }
   ]
 }
 ```
 
-Final summary written to `.ralph/COMPLETE.md`.
-
-## Monitoring Active Pipeline
-
-Use Claude Code's task system to monitor:
-
+**View state**:
 ```bash
-# List all tasks
-/tasks
-
-# Check specific task
-/task <task-id>
-
-# See completed tasks
-/tasks completed
+~/.claude/design-ops/enforcement/lib/ralph-state.sh read --spec auth-feature
 ```
-
-## Troubleshooting
-
-### "Task file not found"
-Run ralph-orchestrator.py first to generate tasks.
-
-### "Validation keeps failing"
-Each task has an instruction file explaining what needs to be fixed. Read it carefully.
-
-### "Task stuck in pending"
-Check dependencies with `/task <task-id>`. Task won't start until blockedBy tasks complete.
-
-### "Want to skip a gate"
-DON'T. Each gate catches different issues. Skipping = shipping bugs.
-
-## Integration with Design-Ops
-
-RALPH is the **implementation phase** of Design-Ops:
-
-```
-Design-Ops Flow:
-  Research → Journeys → Specs → VALIDATE → RALPH → Production
-                                    ↑          ↑
-                                  Gate 2   Gates 3-8
-```
-
-Gates 1-2 (STRESS_TEST, VALIDATE) can be run standalone for spec validation.
-Gates 3-8 require the full RALPH pipeline.
-
-## Files Created
-
-```
-.ralph/
-├── tasks.json                    # Task definitions
-├── task-creation-instructions.md # Instructions for Claude Code
-├── metrics/
-│   ├── gate-1.json
-│   ├── gate-2.json
-│   └── ...
-└── COMPLETE.md                   # Final summary
-```
-
-## Success Criteria
-
-Pipeline is complete when:
-- ✅ All 12 gates passed
-- ✅ All tests passing
-- ✅ Security scan clean
-- ✅ Performance audit > 90
-- ✅ Visual regression approved
-- ✅ Smoke tests passing
-- ✅ Git history shows all commits
-
-## Next Steps After RALPH
-
-1. **Manual review** - Human review of generated code
-2. **Integration testing** - Test with real systems
-3. **Deployment** - Ship to staging/production
-4. **Monitoring** - Track in production
-5. **Retrospective** - Update learnings
 
 ---
 
-**Remember**: RALPH automates rigor, not thinking. Review the code, understand the decisions, and validate the approach makes sense for your use case.
+## Troubleshooting
+
+### "State file not found"
+
+Initialize manually:
+```bash
+~/.claude/design-ops/enforcement/lib/ralph-state.sh init \
+  --spec specs/feature.md \
+  --prp PRPs/feature-prp.md
+```
+
+### "Tasks not executing"
+
+Check dependencies:
+```
+/tasks
+```
+
+Tasks execute when `blockedBy` dependencies complete.
+
+### "Integration tests failing"
+
+Check state file to see which GATE 6.N introduced regression:
+```bash
+~/.claude/design-ops/enforcement/lib/ralph-state.sh read --spec feature
+```
+
+Git log shows commit for that sub-task - rollback and fix.
+
+---
+
+*RALPH: Where specs compile to production-ready code.*
