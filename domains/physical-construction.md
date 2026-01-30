@@ -3,12 +3,16 @@
 Extends: [[system-invariants]]
 Domain: Buildings, infrastructure, physical fabrication
 
+<!-- Invariant Range: 40-47 (Physical Construction reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-65
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
 
 Load this domain for:
-- House construction (Kanyakumari)
+- House construction (Kanyakumari - coastal, cyclone zone)
 - Renovation projects
 - Infrastructure builds
 - Physical product manufacturing
@@ -17,9 +21,9 @@ Load this domain for:
 
 ---
 
-## Domain Invariants (16-21)
+## Domain Invariants (40-47)
 
-### 16. Material Properties Must Be Climate-Validated
+### 40. Material Properties Must Be Climate-Validated
 
 **Principle**: Every material must be proven for local environment
 
@@ -37,7 +41,7 @@ Load this domain for:
 
 ---
 
-### 17. Vendor Capabilities Must Be Validated
+### 41. Vendor Capabilities Must Be Validated
 
 **Principle**: No spec that assumes unverified contractor expertise
 
@@ -55,7 +59,7 @@ Load this domain for:
 
 ---
 
-### 18. Temporal Constraints Must Account for Climate
+### 42. Temporal Constraints Must Account for Climate
 
 **Principle**: Scheduling must consider weather/seasons
 
@@ -73,7 +77,7 @@ Load this domain for:
 
 ---
 
-### 19. Inspection Gates Must Be Explicit
+### 43. Inspection Gates Must Be Explicit
 
 **Principle**: Every phase must have validation checkpoint
 
@@ -91,7 +95,7 @@ Load this domain for:
 
 ---
 
-### 20. Material Failure Modes Must Be Documented
+### 44. Material Failure Modes Must Be Documented
 
 **Principle**: Every material must state how it can fail and recovery cost
 
@@ -109,7 +113,7 @@ Load this domain for:
 
 ---
 
-### 21. Supply Chain Must Be Stress-Tested
+### 45. Supply Chain Must Be Stress-Tested
 
 **Principle**: Material specs must include sourcing constraints
 
@@ -127,28 +131,84 @@ Load this domain for:
 
 ---
 
+### 46. Cyclone Resistance Must Be Designed In
+
+**Principle**: Coastal construction must meet IS 15498 cyclone-resistant standards
+
+**Source**: IS 15498:2004 - Guidelines for Improving Cyclonic Resistance of Low Rise Houses; Tamil Nadu Combined Development and Building Rules 2019
+
+**Violation**: Construction without wind load analysis or cyclone considerations
+
+**Examples**:
+- ❌ "Build standard residential design"
+- ❌ "Use flat roof for simplicity"
+- ❌ "Standard door and window sizes"
+- ✅ "Wind load analysis per IS 875-3 with cyclonic factor + design for 200 km/h wind speed"
+- ✅ "Hip/pyramidal roof with 22°-30° slope + secured roof-to-wall connections + no overhangs >600mm"
+- ✅ "Windows: impact-resistant glass OR shutters + smaller openings on windward side + reinforced frames"
+- ✅ "Foundation: pile foundation OR raised mound (1.2-1.5m) if in surge zone + anchor bolts for superstructure"
+
+**Enforcement**: Coastal construction must specify: wind_load_design(IS_875-3) + roof_pitch(22-30°) + connection_details + surge_elevation_if_applicable → Otherwise REJECT
+
+---
+
+### 47. CRZ Compliance Must Be Verified
+
+**Principle**: Construction must comply with Coastal Regulation Zone norms
+
+**Source**: Tamil Nadu CRZ notification; Ministry of Environment guidelines
+
+**Violation**: Building without CRZ clearance in coastal areas
+
+**Examples**:
+- ❌ "Build house near beach"
+- ❌ "Start construction, get permits later"
+- ❌ "Previous owner had approval"
+- ✅ "CRZ classification: CRZ-II + setback_verified(50m from HTL) + CZMP_approved + SEIAA_clearance"
+- ✅ "CRZ-III area: no_construction_in_NDZ(0-200m) OR traditional_dwelling_exemption_verified"
+- ✅ "Existing structure: regularization_status_confirmed + compliance_certificate_obtained"
+
+**Enforcement**: Coastal construction must specify: CRZ_zone_classification + setback_compliance + clearance_status → Otherwise REJECT
+
+---
+
 ## Construction-Specific Sub-Invariants
 
-### 21a. Concrete Specifications
+### 45a. Concrete Specifications
 
 - Grade must be specified (M20, M25, M30)
 - Cure time must be enforced (typically 28 days)
 - Slump test required before pour
 - Compression test required after cure
 
-### 21b. Steel Specifications
+**Enforcement**: Concrete specs must include: grade(M20|M25|M30) + cure_time(≥28d) + slump_test_before_pour + compression_test_after_cure + coastal_additive_if_applicable(salt_resistant). Concrete pour without grade + cure time + test requirements → REJECT
+
+### 45b. Steel Specifications
 
 - Grade must be specified (Fe415, Fe500, Fe550)
 - Mill certificate required
 - No site welding without engineer approval
 - Lap length per structural drawings
 
-### 21c. Waterproofing Specifications
+**Enforcement**: Steel specs must include: grade(Fe415|Fe500|Fe550) + mill_certificate_required + no_site_welding_without_approval + lap_length_per_drawing + corrosion_protection_if_coastal. Steel work without grade + mill certificate requirement → REJECT
+
+### 45c. Waterproofing Specifications
 
 - System must be specified (not just "waterproof")
 - Warranty period required (minimum 5 years)
 - Water test before concealment
 - Drainage path must be defined
+
+**Enforcement**: Waterproofing specs must include: system_name(not generic "waterproof") + warranty_period(≥5yr) + water_test_before_concealment + drainage_path_defined. Generic "waterproofing" without system + warranty + test → REJECT
+
+### 45d. Coastal Corrosion Protection
+
+- All exposed metal must have marine-grade coating or galvanization
+- Concrete cover increased for coastal exposure (per IS 456)
+- Stainless steel or coated fasteners required within 5km of coast
+- 5-year coating renewal schedule required
+
+**Enforcement**: Coastal construction must specify: metal_protection_system + concrete_cover_increase + fastener_specification + maintenance_schedule. Exposed metal within 5km of coast without corrosion protection plan → REJECT
 
 ---
 
@@ -156,16 +216,18 @@ Load this domain for:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 16 | Material Properties Must Be Climate-Validated | Materials have climate specs |
-| 17 | Vendor Capabilities Must Be Validated | Contractors have verified credentials |
-| 18 | Temporal Constraints Must Account for Climate | Schedule includes monsoon buffer |
-| 19 | Inspection Gates Must Be Explicit | Every phase has pass/fail criteria |
-| 20 | Material Failure Modes Must Be Documented | Failure + detection + recovery cost |
-| 21 | Supply Chain Must Be Stress-Tested | Lead times + fallbacks documented |
+| 40 | Material Properties Must Be Climate-Validated | Materials have climate specs |
+| 41 | Vendor Capabilities Must Be Validated | Contractors have verified credentials |
+| 42 | Temporal Constraints Must Account for Climate | Schedule includes monsoon buffer |
+| 43 | Inspection Gates Must Be Explicit | Every phase has pass/fail criteria |
+| 44 | Material Failure Modes Must Be Documented | Failure + detection + recovery cost |
+| 45 | Supply Chain Must Be Stress-Tested | Lead times + fallbacks documented |
+| 46 | Cyclone Resistance Must Be Designed In | Wind load + roof pitch + connections |
+| 47 | CRZ Compliance Must Be Verified | Zone classification + setback + clearance |
 
 ---
 
 *Domain: Physical Construction*
-*Invariants: 16-21 (plus sub-invariants)*
-*Use with: Core invariants 1-10*
+*Invariants: 40-47 (plus sub-invariants)*
+*Use with: Core invariants 1-11*
 *Often combined with: remote-management.md*

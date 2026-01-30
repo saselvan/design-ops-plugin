@@ -16,9 +16,9 @@ Load this domain for:
 
 ---
 
-## Domain Invariants (11-15)
+## Domain Invariants (12-15)
 
-### 11. User Emotion Must Map to Affordance
+### 12. User Emotion Must Map to Affordance
 
 **Principle**: Emotional goals must become UI/UX elements
 
@@ -36,7 +36,7 @@ Load this domain for:
 
 ---
 
-### 12. Behavioral Friction Must Be Quantified
+### 13. Behavioral Friction Must Be Quantified
 
 **Principle**: "Easy" must become measurable interaction cost
 
@@ -51,24 +51,6 @@ Load this domain for:
 - ✅ "Quick := <5_sec_total + 1_tap_to_start + no_scrolling_required"
 
 **Enforcement**: Friction words (easy, simple, quick, fast, intuitive) must specify: tap_count + time_limit + input_method → Otherwise REJECT
-
----
-
-### 13. Accessibility Must Be Explicit
-
-**Principle**: Every UI spec must declare accessibility compliance
-
-**Violation**: Missing WCAG/platform accessibility guidelines
-
-**Examples**:
-- ❌ "Create login screen"
-- ❌ "Show meal list"
-- ❌ "Display dashboard"
-- ✅ "Login screen: WCAG_AA + VoiceOver_labels + dynamic_type_support + 44pt_touch_targets"
-- ✅ "Meal list: color_contrast≥4.5:1 + screen_reader_order + reduced_motion_fallback"
-- ✅ "Dashboard: keyboard_navigable + focus_indicators + aria_labels_complete"
-
-**Enforcement**: Every UI component must include accessibility declaration → Otherwise REJECT
 
 ---
 
@@ -116,11 +98,15 @@ Load this domain for:
 - Confirmations must be inline or non-blocking
 - Progress indicators required for operations >500ms
 
+**Enforcement**: Modal keywords (alert, confirm, dialog, popup) in primary user flows must specify: dismissible + non-blocking OR explicit justification. Blocking modal in primary flow without justification → REJECT
+
 ### 15b. Error Messages Must Be Actionable
 
 - Error copy ≤15 words, neutral tone
 - Must tell user what to do, not just what went wrong
 - No technical jargon in user-facing errors
+
+**Enforcement**: Error message specs must include: user_action + word_count ≤15. Technical terms (exception, null, undefined, 500, timeout) in user-facing error text → REJECT
 
 ### 15c. Default State Must Be Recoverable
 
@@ -128,11 +114,7 @@ Load this domain for:
 - Auto-save or explicit save prompts required
 - Recovery path documented for each state
 
-### 15d. Touch Targets Must Be Accessible
-
-- Minimum 44px touch targets on mobile (iOS HIG)
-- Adequate spacing between interactive elements
-- Keyboard navigation supported for all actions
+**Enforcement**: Stateful screens must specify: auto_save OR save_prompt OR state_persistence. Form/editor without save strategy → REJECT
 
 ---
 
@@ -140,14 +122,13 @@ Load this domain for:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 11 | User Emotion Must Map to Affordance | "Feel X" → ":= UI elements" |
-| 12 | Behavioral Friction Must Be Quantified | "Easy" → taps + seconds |
-| 13 | Accessibility Must Be Explicit | Every UI has a11y declaration |
+| 12 | User Emotion Must Map to Affordance | "Feel X" → ":= UI elements" |
+| 13 | Behavioral Friction Must Be Quantified | "Easy" → taps + seconds |
 | 14 | Offline Behavior Must Be Defined | Network ops have offline mode |
 | 15 | Loading States Must Be Bounded | Spinners have timeouts |
 
 ---
 
 *Domain: Consumer Product*
-*Invariants: 11-15 (plus sub-invariants)*
-*Use with: Core invariants 1-10*
+*Invariants: 12-15 (plus sub-invariants)*
+*Use with: Core invariants 1-11*

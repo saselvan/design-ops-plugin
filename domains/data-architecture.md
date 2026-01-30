@@ -3,6 +3,10 @@
 Extends: [[system-invariants]]
 Domain: Data pipelines, warehouses, analytics, ML systems
 
+<!-- Invariant Range: 20-24 (Data Architecture reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-65
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
@@ -18,9 +22,9 @@ Load this domain for:
 
 ---
 
-## Domain Invariants (22-26)
+## Domain Invariants (20-24)
 
-### 22. Schema Evolution Must Be Explicit
+### 20. Schema Evolution Must Be Explicit
 
 **Principle**: Every schema change must specify migration path
 
@@ -38,7 +42,7 @@ Load this domain for:
 
 ---
 
-### 23. Data Lineage Must Be Traceable
+### 21. Data Lineage Must Be Traceable
 
 **Principle**: Every derived value must reference its source
 
@@ -56,7 +60,7 @@ Load this domain for:
 
 ---
 
-### 24. Aggregation Scope Must Be Bounded
+### 22. Aggregation Scope Must Be Bounded
 
 **Principle**: All aggregations must specify max cardinality
 
@@ -74,7 +78,7 @@ Load this domain for:
 
 ---
 
-### 25. Temporal Semantics Must Be Explicit
+### 23. Temporal Semantics Must Be Explicit
 
 **Principle**: Time-based queries must specify timezone and granularity
 
@@ -92,7 +96,7 @@ Load this domain for:
 
 ---
 
-### 26. PII Must Be Declared and Protected
+### 24. PII Must Be Declared and Protected
 
 **Principle**: Every field with personal data must be tagged
 
@@ -112,33 +116,41 @@ Load this domain for:
 
 ## Data-Specific Sub-Invariants
 
-### 26a. Data Quality Checks
+### 24a. Data Quality Checks
 
 - Every pipeline must have data quality assertions
 - Null rate thresholds must be specified
 - Schema validation at ingestion
 - Freshness checks with alerting
 
-### 26b. Partitioning Strategy
+**Enforcement**: Pipeline specs must include: null_threshold + schema_validation + freshness_sla. Pipeline without data quality assertions → REJECT
+
+### 24b. Partitioning Strategy
 
 - Large tables must declare partition strategy
 - Partition key must align with query patterns
 - Partition pruning must be validated
 - Retention policy per partition
 
-### 26c. Idempotency for Pipelines
+**Enforcement**: Tables exceeding 10M rows or 10GB must specify: partition_key + retention_policy + pruning_validation. Large table without partition strategy → REJECT
+
+### 24c. Idempotency for Pipelines
 
 - All pipelines must be rerunnable
 - Duplicate handling must be specified
 - Checkpoint/recovery mechanism required
 - Exactly-once vs at-least-once declared
 
-### 26d. Cost Attribution
+**Enforcement**: Pipeline specs must specify: duplicate_handling(skip|upsert|fail) + checkpoint_mechanism + delivery_guarantee(exactly_once|at_least_once). Pipeline without idempotency declaration → REJECT
+
+### 24d. Cost Attribution
 
 - Query costs must be attributable to teams/projects
 - Resource consumption must have budgets
 - Alert on budget threshold (80%)
 - Optimization recommendations tracked
+
+**Enforcement**: Query/pipeline specs must include: cost_owner(team) + budget_limit + alert_threshold. Unbounded resource consumption without budget → REJECT
 
 ---
 
@@ -146,15 +158,15 @@ Load this domain for:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 22 | Schema Evolution Must Be Explicit | Changes have migration + rollback |
-| 23 | Data Lineage Must Be Traceable | Derived values show source + logic |
-| 24 | Aggregation Scope Must Be Bounded | Aggregations have limits + timeouts |
-| 25 | Temporal Semantics Must Be Explicit | Time queries specify timezone |
-| 26 | PII Must Be Declared and Protected | Personal data tagged + protected |
+| 20 | Schema Evolution Must Be Explicit | Changes have migration + rollback |
+| 21 | Data Lineage Must Be Traceable | Derived values show source + logic |
+| 22 | Aggregation Scope Must Be Bounded | Aggregations have limits + timeouts |
+| 23 | Temporal Semantics Must Be Explicit | Time queries specify timezone |
+| 24 | PII Must Be Declared and Protected | Personal data tagged + protected |
 
 ---
 
 *Domain: Data Architecture*
-*Invariants: 22-26 (plus sub-invariants)*
-*Use with: Core invariants 1-10*
+*Invariants: 20-24 (plus sub-invariants)*
+*Use with: Core invariants 1-11*
 *Often combined with: integration.md*

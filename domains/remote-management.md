@@ -3,12 +3,16 @@
 Extends: [[system-invariants]]
 Domain: Projects managed from distance (different city/country/timezone)
 
+<!-- Invariant Range: 48-55 (Remote Management reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-65
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
 
 Load this domain for:
-- House construction (Kanyakumari from LA)
+- House construction (Kanyakumari from LA - 13.5hr timezone difference)
 - Remote team management
 - Distributed project oversight
 - Cross-timezone coordination
@@ -18,9 +22,9 @@ Load this domain for:
 
 ---
 
-## Domain Invariants (31-36)
+## Domain Invariants (48-55)
 
-### 31. Inspection Must Be Independent
+### 48. Inspection Must Be Independent
 
 **Principle**: Remote owner must have eyes independent of executor
 
@@ -38,7 +42,7 @@ Load this domain for:
 
 ---
 
-### 32. Communication Protocol Must Be Explicit
+### 49. Communication Protocol Must Be Explicit
 
 **Principle**: Every stakeholder must have defined communication channel and cadence
 
@@ -56,7 +60,7 @@ Load this domain for:
 
 ---
 
-### 33. Payment Must Be Milestone-Gated
+### 50. Payment Must Be Milestone-Gated
 
 **Principle**: Payments must be tied to verified deliverables
 
@@ -74,7 +78,7 @@ Load this domain for:
 
 ---
 
-### 34. Decision Authority Must Be Delegated Explicitly
+### 51. Decision Authority Must Be Delegated Explicitly
 
 **Principle**: Clear boundaries for on-site decisions vs owner approval
 
@@ -92,7 +96,7 @@ Load this domain for:
 
 ---
 
-### 35. Documentation Must Be Timestamped and Immutable
+### 52. Documentation Must Be Timestamped and Immutable
 
 **Principle**: All project records must be tamper-evident
 
@@ -110,7 +114,7 @@ Load this domain for:
 
 ---
 
-### 36. Contingency Must Account for Physical Distance
+### 53. Contingency Must Account for Physical Distance
 
 **Principle**: Fallback plans must work without owner presence
 
@@ -128,35 +132,79 @@ Load this domain for:
 
 ---
 
+### 54. Communication Must Bridge Language Gaps
+
+**Principle**: Remote oversight across language barriers must have explicit translation/interpretation
+
+**Violation**: Assuming English proficiency or shared terminology
+
+**Examples**:
+- ❌ "Contractor speaks some English"
+- ❌ "We'll manage with WhatsApp translate"
+- ❌ "Technical terms are universal"
+- ✅ "Primary communication: Tamil via local_agent(Dad) + English_summary_for_owner + critical_docs_bilingual"
+- ✅ "Technical terms: glossary_created(English↔Tamil) + photo_reference_for_materials + brand_names_specified"
+- ✅ "Contracts: bilingual_version + legal_review_in_both_languages + verbal_explanation_witnessed"
+
+**Enforcement**: Cross-language projects must specify: translation_mechanism + terminology_glossary + bilingual_critical_docs → Otherwise REJECT
+
+---
+
+### 55. Async Approvals Must Have Bounded Windows
+
+**Principle**: Decisions blocked on remote owner must have time limits and fallback authority
+
+**Violation**: Work stops indefinitely waiting for owner across timezones
+
+**Examples**:
+- ❌ "Wait for owner approval before proceeding"
+- ❌ "Send message and wait for response"
+- ❌ "Don't proceed without sign-off"
+- ✅ "Approval request: submit_with_recommendation + owner_response_window(24hr) + auto_escalate_to_local_agent + proceed_with_recommendation_after_48hr_if_non_critical"
+- ✅ "Critical approval: 12hr_window + phone_call_if_no_response + local_agent_authority_if_unreachable(72hr)"
+- ✅ "Blocking decision: calendar_hold_for_sync_call + backup_decision_maker_named + deadline_explicit"
+
+**Enforcement**: Approval workflows must specify: response_window + escalation_path + fallback_authority + proceed_conditions → Otherwise REJECT
+
+---
+
 ## Remote-Specific Sub-Invariants
 
-### 36a. Timezone Coordination
+### 53a. Timezone Coordination
 
 - Meeting times must specify timezone explicitly
 - Async-first communication preferred
 - Response windows must account for timezone gaps
 - Urgent vs non-urgent must have different SLAs
 
-### 36b. Trust But Verify
+**Enforcement**: Meeting/deadline specs must include: timezone_explicit(IST|PST|UTC) + async_default + response_window_by_urgency(urgent:<4hr, normal:<24hr, low:<72hr). Meeting time without timezone OR response SLA without urgency tier → REJECT
+
+### 53b. Trust But Verify
 
 - No single point of trust
 - Cross-verification for critical claims
 - Random spot-checks built into process
 - Incentive alignment documented
 
-### 36c. Information Asymmetry Mitigation
+**Enforcement**: Critical claims must specify: verification_source_independent_of_executor + cross_check_method + spot_check_frequency(random). Single-source-of-truth controlled by executor → REJECT
+
+### 53c. Information Asymmetry Mitigation
 
 - Owner must have direct access to key data (not through executor)
 - Multiple information sources for triangulation
 - Regular knowledge transfer sessions
 - Documentation accessible to owner 24/7
 
-### 36d. Visit Planning
+**Enforcement**: Project data must specify: owner_direct_access_method + data_sources(≥2 independent) + knowledge_transfer_cadence. Owner data access only through executor → REJECT
+
+### 53d. Visit Planning
 
 - Site visits must have structured agenda
 - Pre-visit information gathering required
 - Post-visit action items documented
 - Visit findings feed back into remote process
+
+**Enforcement**: Site visits must include: pre_visit_agenda + information_requests(48hr_before) + post_visit_action_log + process_feedback_integration. Ad-hoc visit without structured agenda → REJECT
 
 ---
 
@@ -164,16 +212,18 @@ Load this domain for:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 31 | Inspection Must Be Independent | Eyes other than executor |
-| 32 | Communication Protocol Must Be Explicit | Channels + cadence + escalation defined |
-| 33 | Payment Must Be Milestone-Gated | Payments tied to verified deliverables |
-| 34 | Decision Authority Must Be Delegated | Clear boundaries for on-site vs owner |
-| 35 | Documentation Must Be Timestamped | Immutable, timestamped records |
-| 36 | Contingency Must Account for Distance | Fallbacks work without owner presence |
+| 48 | Inspection Must Be Independent | Eyes other than executor |
+| 49 | Communication Protocol Must Be Explicit | Channels + cadence + escalation defined |
+| 50 | Payment Must Be Milestone-Gated | Payments tied to verified deliverables |
+| 51 | Decision Authority Must Be Delegated | Clear boundaries for on-site vs owner |
+| 52 | Documentation Must Be Timestamped | Immutable, timestamped records |
+| 53 | Contingency Must Account for Distance | Fallbacks work without owner presence |
+| 54 | Communication Must Bridge Language Gaps | Translation + glossary + bilingual docs |
+| 55 | Async Approvals Must Have Bounded Windows | Response window + escalation + fallback |
 
 ---
 
 *Domain: Remote Management*
-*Invariants: 31-36 (plus sub-invariants)*
-*Use with: Core invariants 1-10*
+*Invariants: 48-55 (plus sub-invariants)*
+*Use with: Core invariants 1-11*
 *Critical combination: physical-construction.md + remote-management.md for house build*

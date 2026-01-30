@@ -3,6 +3,10 @@
 Extends: [[system-invariants]]
 Domain: APIs, webhooks, third-party services, external integrations
 
+<!-- Invariant Range: 16-19 (Integration reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-65
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
@@ -14,12 +18,13 @@ Load this domain for:
 - OAuth/authentication flows
 - Payment gateway integrations
 - External data sources
+- LineSheet Pro (AIMS 360 export integration)
 
 ---
 
-## Domain Invariants (27-30)
+## Domain Invariants (16-19)
 
-### 27. API Versioning Must Be Explicit
+### 16. API Versioning Must Be Explicit
 
 **Principle**: Every API endpoint must declare version and deprecation strategy
 
@@ -37,7 +42,7 @@ Load this domain for:
 
 ---
 
-### 28. Rate Limits Must Be Declared
+### 17. Rate Limits Must Be Declared
 
 **Principle**: Every external call must specify rate handling
 
@@ -55,7 +60,7 @@ Load this domain for:
 
 ---
 
-### 29. Idempotency Must Be Guaranteed
+### 18. Idempotency Must Be Guaranteed
 
 **Principle**: Retryable operations must produce same result
 
@@ -73,7 +78,7 @@ Load this domain for:
 
 ---
 
-### 30. Timeout Budgets Must Be Allocated
+### 19. Timeout Budgets Must Be Allocated
 
 **Principle**: Request chains must have explicit timeout distribution
 
@@ -93,33 +98,41 @@ Load this domain for:
 
 ## Integration-Specific Sub-Invariants
 
-### 30a. Authentication Token Management
+### 19a. Authentication Token Management
 
 - Tokens must have explicit expiry handling
 - Refresh logic must be proactive (before expiry)
 - Failed refresh must trigger re-authentication flow
 - Token storage must be secure (never in logs/URLs)
 
-### 30b. Webhook Delivery Guarantees
+**Enforcement**: Token specs must include: expiry_handling + proactive_refresh(before_expiry) + refresh_failure_flow + secure_storage(no_logs|no_urls). Token usage without expiry handling → REJECT
+
+### 19b. Webhook Delivery Guarantees
 
 - Delivery semantics must be declared (at-least-once, at-most-once)
 - Signature verification required for incoming webhooks
 - Payload schema versioning required
 - Retry policy must be documented
 
-### 30c. Error Response Standards
+**Enforcement**: Webhook specs must include: delivery_semantics(at_least_once|at_most_once|exactly_once) + signature_verification + payload_schema_version + retry_policy. Webhook without delivery guarantee declaration → REJECT
+
+### 19c. Error Response Standards
 
 - Error responses must follow consistent schema
 - Error codes must be documented and stable
 - User-facing vs internal errors must be distinguished
 - Correlation IDs required for debugging
 
-### 30d. Contract Testing
+**Enforcement**: API specs must include: error_schema + error_code_registry + user_vs_internal_distinction + correlation_id_requirement. API without error response standard → REJECT
+
+### 19d. Contract Testing
 
 - API contracts must be testable (OpenAPI, GraphQL schema)
 - Breaking changes must fail contract tests
 - Consumer-driven contracts for critical integrations
 - Mock servers for development/testing
+
+**Enforcement**: API specs must include: contract_definition(OpenAPI|GraphQL|AsyncAPI) + breaking_change_detection + mock_server_availability. API without testable contract → REJECT
 
 ---
 
@@ -127,14 +140,14 @@ Load this domain for:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 27 | API Versioning Must Be Explicit | Endpoints have version + deprecation plan |
-| 28 | Rate Limits Must Be Declared | External calls have limits + backoff |
-| 29 | Idempotency Must Be Guaranteed | Mutations have idempotency keys |
-| 30 | Timeout Budgets Must Be Allocated | Chains have time budgets per hop |
+| 16 | API Versioning Must Be Explicit | Endpoints have version + deprecation plan |
+| 17 | Rate Limits Must Be Declared | External calls have limits + backoff |
+| 18 | Idempotency Must Be Guaranteed | Mutations have idempotency keys |
+| 19 | Timeout Budgets Must Be Allocated | Chains have time budgets per hop |
 
 ---
 
 *Domain: Integration*
-*Invariants: 27-30 (plus sub-invariants)*
-*Use with: Core invariants 1-10*
+*Invariants: 16-19 (plus sub-invariants)*
+*Use with: Core invariants 1-11*
 *Often combined with: data-architecture.md*

@@ -3,6 +3,10 @@
 Extends: [[system-invariants]]
 Domain: Projects requiring unknown technologies or skills
 
+<!-- Invariant Range: 56-62 (Skill Gap Transcendence reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-62
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
@@ -29,9 +33,9 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-## Domain Invariants (37-43)
+## Domain Invariants (56-62)
 
-### 37. Skill Gaps Force Explicit Learning Budget
+### 56. Skill Gaps Force Explicit Learning Budget
 
 **Principle**: Unknown technologies must have learning time as first-class schedule items
 
@@ -49,7 +53,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-### 38. Support Structure Must Be Pre-Defined
+### 57. Support Structure Must Be Pre-Defined
 
 **Principle**: Every skill gap needs explicit blocker resolution protocol
 
@@ -67,7 +71,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-### 39. Demos Require Triple-Backup Protocol
+### 58. Demos Require Triple-Backup Protocol
 
 **Principle**: Public demos with skill gaps need layered fallbacks
 
@@ -85,7 +89,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-### 40. Health Signals Trigger Scope Adjustment
+### 59. Health Signals Trigger Scope Adjustment
 
 **Principle**: Physical/mental stress is a legitimate project constraint
 
@@ -103,7 +107,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-### 41. Fixed Deadlines Require Tiered Scope
+### 60. Fixed Deadlines Require Tiered Scope
 
 **Principle**: Immovable dates mean movable scope, explicitly defined
 
@@ -121,7 +125,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-### 42. Learning Time Is First-Class Work
+### 61. Learning Time Is First-Class Work
 
 **Principle**: "I'm learning" is a legitimate status, not an excuse
 
@@ -139,7 +143,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ---
 
-### 43. Discovery Phase Required for Unknowns
+### 62. Discovery Phase Required for Unknowns
 
 **Principle**: New territory gets 20% of timeline for exploration before commitment
 
@@ -159,28 +163,28 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 ## Skill Gap Sub-Invariants
 
-### 43a. Imposter Syndrome Mitigation
+### 62a. Imposter Syndrome Mitigation
 
 - Skill gaps are normal, not shameful
 - Documentation of gaps is strength, not weakness
 - Asking for help is expected, not failure
 - "I don't know yet" is valid answer
 
-### 43b. Manager Communication Protocol
+### 62b. Manager Communication Protocol
 
 - Skill gaps communicated proactively
 - Tradeoffs presented as choices, not problems
 - Scope cuts framed as decisions, not failures
 - Learning time defended as necessary work
 
-### 43c. Validation Before Commitment
+### 62c. Validation Before Commitment
 
 - Never commit to timeline without validation prototype
 - "I need to spike this first" is legitimate
 - Re-estimation after discovery is planned, not reactive
 - Early failures are cheaper than late failures
 
-### 43d. Psychological Safety Preservation
+### 62d. Psychological Safety Preservation
 
 - Projects shouldn't require heroics
 - Sustainable pace over crunch
@@ -193,13 +197,13 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 37 | Skill Gaps Force Explicit Learning Budget | Learning time budgeted, not assumed |
-| 38 | Support Structure Must Be Pre-Defined | Blocker resolution protocol exists |
-| 39 | Demos Require Triple-Backup | Three fallback paths defined |
-| 40 | Health Signals Trigger Scope Adjustment | Stress → automatic scope reduction |
-| 41 | Fixed Deadlines Require Tiered Scope | MVP/stretch/optional defined upfront |
-| 42 | Learning Time Is First-Class Work | Learning scheduled, not overhead |
-| 43 | Discovery Phase Required for Unknowns | 20% for exploration + re-estimation |
+| 56 | Skill Gaps Force Explicit Learning Budget | Learning time budgeted, not assumed |
+| 57 | Support Structure Must Be Pre-Defined | Blocker resolution protocol exists |
+| 58 | Demos Require Triple-Backup | Three fallback paths defined |
+| 59 | Health Signals Trigger Scope Adjustment | Stress → automatic scope reduction |
+| 60 | Fixed Deadlines Require Tiered Scope | MVP/stretch/optional defined upfront |
+| 61 | Learning Time Is First-Class Work | Learning scheduled, not overhead |
+| 62 | Discovery Phase Required for Unknowns | 20% for exploration + re-estimation |
 
 ---
 
@@ -216,7 +220,7 @@ Skill gaps are **compilation constraints**, not blockers. They force clarity abo
 ---
 
 *Domain: Skill Gap Transcendence*
-*Invariants: 37-43 (plus sub-invariants)*
-*Use with: Core invariants 1-10*
+*Invariants: 56-62 (plus sub-invariants)*
+*Use with: Core invariants 1-11*
 *Often combined with: consumer-product.md, integration.md*
 *Philosophy: Skill gaps are compilation constraints, not blockers*

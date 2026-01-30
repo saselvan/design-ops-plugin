@@ -3,6 +3,10 @@
 Extends: [[system-invariants]], [[data-architecture]]
 Domain: Clinical AI systems, medical RAG, diagnostic support, healthcare LLM applications
 
+<!-- Invariant Range: 25-31 (Healthcare AI reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-65
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
@@ -18,9 +22,9 @@ Load this domain for:
 
 ---
 
-## Domain Invariants (27-30)
+## Domain Invariants (25-31)
 
-### 27. Safety Must Be Enforced by Code, Not Prompts
+### 25. Safety Must Be Enforced by Code, Not Prompts
 
 **Principle**: Safety-critical outputs cannot rely on LLM prompt compliance
 
@@ -40,7 +44,7 @@ Load this domain for:
 
 ---
 
-### 28. Clinical Outputs Must Flag Human Review
+### 26. Clinical Outputs Must Flag Human Review
 
 **Principle**: Any diagnostic or treatment-adjacent output must include human review flag
 
@@ -58,9 +62,9 @@ Load this domain for:
 
 ---
 
-### 29. PHI Must Have Healthcare-Grade Protection
+### 27. PHI Must Have Healthcare-Grade Protection
 
-**Principle**: PHI handling must exceed standard PII requirements (extends Invariant #26)
+**Principle**: PHI handling must exceed standard PII requirements (extends Invariant #24)
 
 **Violation**: PHI treated as regular PII without healthcare-specific controls
 
@@ -76,7 +80,7 @@ Load this domain for:
 
 ---
 
-### 30. Model Provenance Must Be Traceable
+### 28. Model Provenance Must Be Traceable
 
 **Principle**: Clinical AI outputs must trace to specific model versions for reproducibility
 
@@ -96,35 +100,103 @@ Load this domain for:
 
 ---
 
+### 29. Hallucination Detection Must Be Systematic
+
+**Principle**: Clinical LLM outputs must have automated hallucination detection, not just human review
+
+**Violation**: Relying solely on clinician review to catch AI errors
+
+**Examples**:
+- ❌ "Clinicians will review AI summaries for accuracy"
+- ❌ "Display AI output with disclaimer"
+- ❌ "Flag low-confidence outputs for review"
+- ✅ "Output validated against: entity_extraction + knowledge_base_check + NLI_consistency_score ≥0.85"
+- ✅ "Hallucination detection: automated_fact_check + omission_detection + severity_classification(minor|major|critical)"
+- ✅ "Clinical summary: source_sentence_attribution + fabrication_score <0.02 + omission_rate <0.05"
+
+**Rationale**: Research shows hallucination rates of 1.5-40% in medical LLMs. Hallucinations use valid clinical language, making them hard to detect without systematic checking. 44% of hallucinations are "major" errors vs 17% of omissions.
+
+**Enforcement**: Clinical LLM outputs must specify: hallucination_detection_method + threshold + omission_detection. Output without systematic validation → REJECT
+
+---
+
+### 30. Model Updates Must Follow PCCP Framework
+
+**Principle**: AI model updates must be pre-planned per FDA 2025 PCCP guidance
+
+**Violation**: Ad-hoc model updates without predetermined change control
+
+**Examples**:
+- ❌ "Update model when performance degrades"
+- ❌ "Retrain quarterly with new data"
+- ❌ "Deploy improved model version"
+- ✅ "PCCP: modification_categories(retraining|threshold_adjustment|feature_addition) + validation_protocol_per_category + acceptance_criteria + rollback_plan"
+- ✅ "Model update: within_PCCP_scope + validation_complete + labeling_updated + UDI_assigned"
+- ✅ "Change outside PCCP scope → new_FDA_submission_required"
+
+**Rationale**: FDA 2025 final guidance requires PCCP for AI-enabled devices. Updates within approved PCCP don't need new submission; updates outside scope require new 510(k)/PMA.
+
+**Enforcement**: Model update specs must include: PCCP_reference OR new_submission_justification + validation_protocol + rollback_plan. Ad-hoc update → REJECT
+
+---
+
+### 31. AI Presence Must Be Labeled Per FDA Requirements
+
+**Principle**: Users must be informed device uses AI and how it functions
+
+**Violation**: AI functionality without clear labeling
+
+**Examples**:
+- ❌ "Deploy diagnostic assistance feature"
+- ❌ "Add AI-powered recommendations"
+- ❌ "Enable smart suggestions"
+- ✅ "Labeling: ai_disclosure_statement + plain_language_description + intended_use + known_limitations"
+- ✅ "User communication: version_history + change_summary + performance_impact + how_to_report_issues"
+- ✅ "SSED/510k_summary: PCCP_description + training_data_characteristics + demographic_performance"
+
+**Rationale**: FDA 2025 guidance requires clear AI labeling including plain-language description, version tracking, and user notification of updates.
+
+**Enforcement**: AI feature specs must include: user_facing_ai_disclosure + intended_use_statement + limitation_disclosure. Unlabeled AI → REJECT
+
+---
+
 ## Healthcare-Specific Sub-Invariants
 
-### 30a. Confidence Reporting
+### 28a. Confidence Reporting
 
 - All clinical AI must report confidence scores
 - Confidence thresholds must be clinically validated
 - Low confidence must trigger explicit uncertainty messaging
 - Confidence calibration must be documented
 
-### 30b. Bias Monitoring
+**Enforcement**: Clinical AI output specs must include: confidence_score + confidence_threshold + low_confidence_behavior(explicit_uncertainty_message) + calibration_documentation. Clinical output without confidence reporting → REJECT
+
+### 28b. Bias Monitoring
 
 - Training data demographics must be documented
 - Performance must be reported across demographic segments
 - Known limitations by population must be disclosed
 - Bias mitigation strategy required
 
-### 30c. Regulatory Readiness
+**Enforcement**: Model specs must include: training_demographics + performance_by_segment(age|sex|race|ethnicity) + known_limitations + bias_mitigation_strategy. Clinical model without bias documentation → REJECT
+
+### 28c. Regulatory Readiness
 
 - FDA 510(k)/De Novo pathway must be identified if applicable
 - Clinical validation study design must be specified
 - Intended use statement required
 - Contraindications must be documented
 
-### 30d. Audit Trail
+**Enforcement**: Clinical AI specs must include: regulatory_pathway(510k|DeNovo|PMA|exempt) + intended_use_statement + contraindications + PCCP_if_applicable. Clinical AI without regulatory classification → REJECT
+
+### 28d. Audit Trail
 
 - All clinical decisions must be logged immutably
 - User actions on AI outputs must be tracked
 - Override/correction logging required
 - Retention per regulatory requirement (typically 7+ years)
+
+**Enforcement**: Clinical decision specs must include: immutable_log + user_action_tracking + override_logging + retention_period(≥7yr) + real_world_performance_monitoring. Clinical decision without audit trail spec → REJECT
 
 ---
 
@@ -132,14 +204,17 @@ Load this domain for:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 27 | Safety Must Be Enforced by Code | No prompt-only safety controls |
-| 28 | Clinical Outputs Must Flag Human Review | Review flag + reviewer type present |
-| 29 | PHI Must Have Healthcare-Grade Protection | HIPAA controls + BAA + audit |
-| 30 | Model Provenance Must Be Traceable | model_version in all outputs |
+| 25 | Safety Must Be Enforced by Code | No prompt-only safety controls |
+| 26 | Clinical Outputs Must Flag Human Review | Review flag + reviewer type present |
+| 27 | PHI Must Have Healthcare-Grade Protection | HIPAA controls + BAA + audit |
+| 28 | Model Provenance Must Be Traceable | model_version in all outputs |
+| 29 | Hallucination Detection Must Be Systematic | Automated detection + thresholds |
+| 30 | Model Updates Must Follow PCCP Framework | PCCP reference or new submission |
+| 31 | AI Presence Must Be Labeled | FDA-compliant AI disclosure |
 
 ---
 
 *Domain: Healthcare AI*
-*Invariants: 27-30 (plus sub-invariants)*
-*Use with: Core invariants 1-10, Data Architecture 22-26*
+*Invariants: 25-31 (plus sub-invariants)*
+*Use with: Core invariants 1-11, Data Architecture 20-24*
 *Applicable: HLS accounts (City of Hope, CHLA, Providence, etc.)*

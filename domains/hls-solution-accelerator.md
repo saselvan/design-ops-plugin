@@ -3,6 +3,10 @@
 Extends: [[system-invariants]], [[healthcare-ai]]
 Domain: Healthcare & Life Sciences demos, solution accelerators, SA enablement tools
 
+<!-- Invariant Range: 32-39 (HLS Solution Accelerator reserved range)
+     Numbering scheme: Core 1-11, Consumer 12-15, Integration 16-19, Data 20-24, Healthcare 25-31, HLS-SA 32-39, Construction 40-47, Remote 48-55, SkillGap 56-65
+     Reserved ranges allow domains to evolve independently -->
+
 ---
 
 ## When to Use
@@ -28,9 +32,9 @@ This domain synthesizes best practices from:
 
 ---
 
-## Domain Invariants (31-38)
+## Domain Invariants (32-39)
 
-### 31. Demo Must Show End Result First
+### 32. Demo Must Show End Result First
 
 **Principle**: Lead with the "Wow!" — show the valuable outcome before explaining how
 
@@ -50,7 +54,7 @@ This domain synthesizes best practices from:
 
 ---
 
-### 32. Solution Must Be Fork-Ready
+### 33. Solution Must Be Fork-Ready
 
 **Principle**: Customer must be able to clone and run in their workspace within 30 minutes
 
@@ -70,7 +74,7 @@ This domain synthesizes best practices from:
 
 ---
 
-### 33. Data Must Be Substitutable
+### 34. Data Must Be Substitutable
 
 **Principle**: Demo works with sample data AND customer's own data with minimal changes
 
@@ -90,7 +94,7 @@ This domain synthesizes best practices from:
 
 ---
 
-### 34. Platform Capabilities Must Be Visible
+### 35. Platform Capabilities Must Be Visible
 
 **Principle**: Demo should naturally showcase Databricks differentiators
 
@@ -117,11 +121,11 @@ This domain synthesizes best practices from:
 | Delta Lake | Time travel, ACID, schema evolution |
 | Workflows | Orchestration, scheduling |
 
-**Enforcement**: Demo must showcase ≥3 Databricks differentiators with explicit callout → REJECT
+**Enforcement**: Demo must showcase ≥3 Databricks differentiators with explicit callout. Generic platform-agnostic demo → REJECT
 
 ---
 
-### 35. Discovery Must Precede Deep Dive
+### 36. Discovery Must Precede Deep Dive
 
 **Principle**: Ask questions before showing how it works
 
@@ -150,7 +154,7 @@ This domain synthesizes best practices from:
 
 ---
 
-### 36. Compliance Readiness Must Be Demonstrable
+### 37. Compliance Readiness Must Be Demonstrable
 
 **Principle**: Show governance/compliance during demo, not as afterthought
 
@@ -180,7 +184,7 @@ This domain synthesizes best practices from:
 
 ---
 
-### 37. Setup Must Be Self-Documenting
+### 38. Setup Must Be Self-Documenting
 
 **Principle**: Customer can set up without SA hand-holding
 
@@ -210,7 +214,7 @@ This domain synthesizes best practices from:
 
 ---
 
-### 38. Value Must Be Quantifiable
+### 39. Value Must Be Quantifiable
 
 **Principle**: Demo should connect to business metrics the buyer cares about
 
@@ -241,29 +245,37 @@ This domain synthesizes best practices from:
 
 ## HLS-Specific Sub-Invariants
 
-### 38a. Clinical Workflow Alignment
+### 39a. Clinical Workflow Alignment
 
 - Demo must show integration point with clinical workflow
 - "Where does this fit in the pathologist's day?"
 - Not just standalone tool — connected to existing systems
 
-### 38b. Stakeholder Mapping
+**Enforcement**: Demo specs must include: workflow_integration_point + existing_system_connections + "day in the life" scenario. Standalone tool demo without workflow context → REJECT
+
+### 39b. Stakeholder Mapping
 
 - Know your audience: Pathologist vs CIO vs CISO vs CFO
 - Different demo paths for different stakeholders
 - Technical depth adjustable based on audience
 
-### 38c. Competitive Differentiation
+**Enforcement**: Demo specs must include: audience_type(clinical|technical|executive|security) + depth_level + tailored_talking_points. Generic one-size-fits-all demo → REJECT
+
+### 39c. Competitive Differentiation
 
 - Be ready for "How is this different from X?"
 - Know competitor limitations (Snowflake, AWS, Google)
 - Lead with differentiation, not feature parity
 
-### 38d. POC Transition Path
+**Enforcement**: Demo specs must include: competitor_comparison_ready(Snowflake|AWS|Google) + ≥2 differentiators with proof points. Demo without competitive positioning → REJECT
+
+### 39d. POC Transition Path
 
 - Clear path from demo → POC → production
 - "Here's what a 2-week POC would look like"
 - Success criteria defined upfront
+
+**Enforcement**: Demo must end with: poc_proposal_template + timeline_estimate + success_criteria_draft. Demo without clear next steps → REJECT
 
 ---
 
@@ -271,14 +283,14 @@ This domain synthesizes best practices from:
 
 | # | Invariant | Key Test |
 |---|-----------|----------|
-| 31 | Demo Must Show End Result First | Outcome in first 30 seconds |
-| 32 | Solution Must Be Fork-Ready | Clone → Run → Working in 30 min |
-| 33 | Data Must Be Substitutable | Sample data + BYOD guide |
-| 34 | Platform Capabilities Must Be Visible | ≥3 Databricks features called out |
-| 35 | Discovery Must Precede Deep Dive | ≥3 discovery questions before features |
-| 36 | Compliance Readiness Must Be Demonstrable | Live compliance check in demo |
-| 37 | Setup Must Be Self-Documenting | README + RUNME + troubleshooting |
-| 38 | Value Must Be Quantifiable | ≥2 business metrics with numbers |
+| 32 | Demo Must Show End Result First | Outcome in first 30 seconds |
+| 33 | Solution Must Be Fork-Ready | Clone → Run → Working in 30 min |
+| 34 | Data Must Be Substitutable | Sample data + BYOD guide |
+| 35 | Platform Capabilities Must Be Visible | ≥3 Databricks features called out |
+| 36 | Discovery Must Precede Deep Dive | ≥3 discovery questions before features |
+| 37 | Compliance Readiness Must Be Demonstrable | Live compliance check in demo |
+| 38 | Setup Must Be Self-Documenting | README + RUNME + troubleshooting |
+| 39 | Value Must Be Quantifiable | ≥2 business metrics with numbers |
 
 ---
 
@@ -320,8 +332,8 @@ Based on Great Demo! + HLS best practices:
 ---
 
 *Domain: HLS Solution Accelerator*
-*Invariants: 31-38 (plus sub-invariants)*
-*Use with: Core invariants 1-10, Healthcare AI 27-30*
+*Invariants: 32-39 (plus sub-invariants)*
+*Use with: Core invariants 1-11, Healthcare AI 25-31*
 *Applicable: Databricks SA work with healthcare providers*
 
 ---
