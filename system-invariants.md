@@ -242,6 +242,129 @@ system-invariants.md          ← You are here (Universal Core)
 
 ---
 
+### TYPE-001: Single Type Source
+
+**Principle**: A codebase MUST have exactly ONE canonical location for database/domain types.
+
+**Violation**: Same interface defined in multiple files
+
+**Examples**:
+- ❌ `TradeShowOrderLine` defined in `order-queue.tsx`, `order-review.tsx`, AND `line-editor.tsx`
+- ❌ Two type files: `database.types.ts` (auto-generated) vs `database.ts` (manual)
+- ✅ `src/types/trade-show-orders.ts` - single source, imported by all consumers
+
+**Enforcement**: 
+```bash
+# Count interface definitions - should be exactly 1 per entity
+grep -r "interface TradeShowOrder" src/ | wc -l
+# If > 1 → REJECT
+```
+
+**Prevention**: 
+- Create `/src/types/{domain}.ts` for each domain
+- Export from `/src/types/index.ts`
+- Lint rule: No inline interface redefinition
+
+---
+
+### TYPE-002: Schema-Type Parity
+
+**Principle**: TypeScript interfaces MUST include ALL fields from database schema, with matching nullability.
+
+**Violation**: Schema has 11 fields, TypeScript interface has 9
+
+**Examples**:
+- ❌ Schema: `image_url TEXT NOT NULL`, TypeScript: `image_url: string | null`
+- ❌ Schema: `extraction_notes JSONB`, TypeScript: missing entirely
+- ✅ Every schema field present in TypeScript with exact nullability
+
+**Enforcement**:
+```bash
+# Compare schema to types during CI
+# OR generate types from schema: npx supabase gen types
+```
+
+**Prevention**:
+- Generate types from schema (don't hand-write)
+- Code review: Check schema SQL against TypeScript interface
+- Automated diff in CI pipeline
+
+---
+
+### TYPE-003: No `as any` for Known Tables
+
+**Principle**: Supabase queries for tables defined in schema MUST NOT use `as any` type assertions.
+
+**Violation**: Using `as any` to bypass type checking instead of fixing types
+
+**Examples**:
+- ❌ `supabase.from('trade_show_orders' as any).select(...)`
+- ❌ `supabase.from('known_table' as any)`
+- ✅ `supabase.from('trade_show_orders').select(...)` with proper types
+
+**Enforcement**:
+```bash
+# Grep for as any on .from() calls
+grep -r "from('.*' as any)" src/
+# If any found → REJECT
+```
+
+**Prevention**:
+- ESLint rule: `@typescript-eslint/no-explicit-any` with exceptions only for truly unknown data
+- Fix type definitions at source, don't workaround with `as any`
+
+---
+
+### FRAME-001: Framework Version Awareness
+
+**Principle**: Before implementing API routes, verify framework version-specific requirements.
+
+**Violation**: Using old patterns after framework upgrade
+
+**Examples**:
+- ❌ Next.js 16: `{ params }: { params: { id: string } }` (old signature)
+- ✅ Next.js 16: `{ params }: { params: Promise<{ id: string }> }` + `await params`
+
+**Enforcement**:
+```bash
+# Check package.json for version
+# Verify API routes use correct signature
+grep -r "params:" src/app/api/ | grep -v "Promise<" | grep -v "await params"
+# If any found in Next.js 16+ → REJECT
+```
+
+**Prevention**:
+- Document version requirements in CONVENTIONS.md
+- Add version check to Ralph task generator
+- Automated migration scripts for framework upgrades
+
+---
+
+### GEN-001: Clean Code Generation
+
+**Principle**: When using CLI tools to generate code files, stderr must be separated from stdout.
+
+**Violation**: npm warnings or errors written to generated code file
+
+**Examples**:
+- ❌ `npx supabase gen types > file.ts` (captures warnings)
+- ❌ Line 1 of generated file: `npm warn exec...`
+- ✅ `npx supabase gen types --output file.ts 2>/dev/null`
+- ✅ `npx supabase gen types 2>/dev/null > file.ts`
+
+**Enforcement**:
+```bash
+# Check first line of generated files for npm warnings
+head -1 file.ts | grep -q "npm warn" && REJECT
+```
+
+**Prevention**:
+- Always redirect stderr: `2>/dev/null` or `--output` flag
+- Validate generated files before commit
+- Use tool's native output flag when available
+
+---
+
 ## How Invariants Are Used
 
 | Artifact | Invariant Role |
@@ -331,9 +454,17 @@ New invariants come from Spec Deltas only. Process:
 | 9 | Blast Radius Must Be Declared | Write ops declare affected scope |
 | 10 | Degradation Path Must Exist | External deps have fallbacks |
 | 11 | Accessibility is Non-Negotiable | WCAG 2.1 AA, keyboard nav, screen readers |
+| **TYPE-001** | **Single Type Source** | **Each interface appears exactly once** |
+| **TYPE-002** | **Schema-Type Parity** | **All schema fields in TypeScript** |
+| **TYPE-003** | **No `as any` for Known Tables** | **`.from()` without `as any`** |
+| **FRAME-001** | **Framework Version Awareness** | **Correct params signature** |
+| **GEN-001** | **Clean Code Generation** | **No stderr in generated files** |
 
 ---
 
-*Last updated: 2026-01-20*
+*Last updated: 2026-02-01*
 *Core invariants: 11*
+*Type invariants: 3*
+*Framework invariants: 1*
+*Generation invariants: 1*
 *Domain invariants: See domain files*

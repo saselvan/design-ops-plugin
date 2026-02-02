@@ -762,6 +762,25 @@ Before generating output, verify ALL of these:
 18. **INV-75 Separation:** Step scripts have NO `pytest`, `npm run build`, `python -m` - those go in test scripts only
 19. **INV-76 Python3:** Every `python` call is `python3` (grep for bare `python ` or `python -c`)
 
+### Type Safety Checks (New - From Retrospective)
+20. **INV-TYPE-001 Single Type Source:** Check that interfaces are not duplicated
+    - Grep for `interface TradeShowOrder` (or main entity) - should appear exactly once
+    - If multiple definitions found → Document in RALPH-GENERATION-LOG.md
+    
+21. **INV-TYPE-002 Schema-Type Parity:** Verify type definitions match schema
+    - Check PRP Appendix B for schema
+    - Generated types should include ALL fields with correct nullability
+    - Missing fields → Flag in PRP-COVERAGE.md
+    
+22. **INV-TYPE-003 No `as any` for Known Tables:** 
+    - Check for `from('table_name' as any)` patterns
+    - If found → REJECT, require proper type definitions
+    
+23. **INV-FRAME-001 Framework Version Awareness:**
+    - Detect framework version (package.json)
+    - For Next.js 16+: Verify `params: Promise<{}>` signature in API routes
+    - Old signature → REJECT with migration instructions
+
 If ANY check fails, fix before outputting.
 
 ## PRP CONTENT
