@@ -1,21 +1,21 @@
 ---
 name: Design
-description: Design Ops v2.3 gold standard. Transform intent → validated specs → executable PRPs through 11-step invariant-enforced pipeline with multi-agent architecture. Now with Implementation Enforcement Invariants to prevent Claude Code shortcuts. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
-version: "2.3"
+description: Design Ops v2.4 gold standard. Transform intent → executable PRPs through streamlined journey-to-PRP pipeline with invariant enforcement and multi-agent architecture. Specs are optional for complex features. USE WHEN design, spec, PRP, validate, requirements, init project, review implementation.
+version: "2.4"
 ---
 
-# Design Ops v2.3 Skill
+# Design Ops v2.5 Skill
 
 **PRODUCTION GOLD STANDARD FOR AI-ASSISTED SYSTEM DESIGN**
 
-Design Ops v2.2 transforms human intent into validated specifications and AI-executable PRPs through a rigorous 11-step invariant-enforced pipeline. This is the definitive workflow—do not deviate.
+Design Ops v2.5 transforms human intent directly into executable PRPs with built-in adversarial review. Every PRP is stress-tested by a devil's advocate pass that checks for missing failure paths, hidden assumptions, ambiguous requirements, and edge cases before implementation begins. The spec layer is optional — for most features, a journey or problem statement goes straight to PRP.
 
 ## Multi-Agent Architecture
 
-The pipeline executes 5 specialized agents in coordinated sequence:
+The pipeline executes 6 specialized agents in coordinated sequence:
 
 ```
-                         Spec (human intent)
+                    Journey / Intent / Spec
                                 │
                 ┌───────────────┼───────────────┐
                 ▼               ▼               ▼
@@ -48,11 +48,23 @@ The pipeline executes 5 specialized agents in coordinated sequence:
                     │ • Executable cmds   │
                     └──────────┬──────────┘
                                │
+                               ▼
+                    ┌─────────────────────┐
+                    │   red-team          │ ← Devil's advocate
+                    │                     │
+                    │ • Failure paths     │
+                    │ • Hidden assumptions│
+                    │ • Edge cases        │
+                    │ • Build order       │
+                    │ • Over-engineering  │
+                    └──────────┬──────────┘
+                               │
                     ┌──────────┴──────────┐
                     ▼                     ▼
-              APPROVED              NEEDS WORK
+              APPROVED              BLOCKED
+              (risks noted)         (must resolve)
                     │                     │
-                    ▼                     └─► Iterate
+                    ▼                     └─► Fix → re-run
             ┌─────────────────────┐
             │   ralph-check       │ ← PRP compliance
             │                     │
@@ -80,15 +92,17 @@ The pipeline executes 5 specialized agents in coordinated sequence:
 
 ---
 
-## Why v2.3 is Production Gold Standard
+## Why v2.5 is Production Gold Standard
 
 **Invariant enforcement as hard gates**: 43 invariants (11 universal + 32 domain-specific) catch design issues at spec-time, not production. The system rejects bad specs; it doesn't attempt fixes.
 
-**11-step non-negotiable pipeline**: Each step is sequential for a reason. Specs generate structure. Stress-test finds incompleteness. Validate finds ambiguity. All must pass before PRP generation.
+**Streamlined pipeline**: Journey → PRP → Implement. The spec layer is collapsed into the PRP for most features. Validation and stress-testing are built into PRP generation. Separate specs are only needed when the approach is uncertain.
+
+**Built-in devil's advocate**: Every PRP is adversarially reviewed before implementation. 7 red team questions probe for missing failure paths, hidden assumptions, ambiguous requirements, build order dependencies, edge cases, UX gaps, and over-engineering. BLOCKING findings halt the pipeline — you fix the PRP before writing code, not after.
 
 **Confidence-gated implementation**: Quantitative risk assessment (1-10 scale) prevents overconfident decisions. A 6/10 spec gets built WITH EXPLICIT RISK ACKNOWLEDGMENT.
 
-**Multi-agent parallel analysis**: Spec-analyst, validator, CONVENTIONS-checker, PRP-generator, and reviewer agents run in coordinated sequence, each with specific expertise.
+**Multi-agent parallel analysis**: Spec-analyst, validator, CONVENTIONS-checker, PRP-generator, red-team reviewer, and ralph-check agents run in coordinated sequence, each with specific expertise.
 
 **Automatic CONVENTIONS enforcement**: Extracts codebase patterns and ensures implementations match project style, not just functional requirements.
 
@@ -484,41 +498,58 @@ The bug would have been caught at step 3 (integration test) instead of in produc
 
 ## The Workflow
 
-Use this exact sequence. Skip nothing.
+Two paths depending on complexity:
+
+### Fast Path (most features) — Journey → PRP
 
 ```
 INTENT (user story, journey, or problem statement)
   ↓
-0. /design spec {journey}                           Create spec from journey
+1. /design prp {journey-or-description}             Generate PRP directly
+   └─► Validation + stress-testing built in
+2. /design check {prp}                              Verify PRP quality
+  ↓ (MUST PASS)
+EXECUTABLE PRP
   ↓
-SPECIFICATION
+3. /design implement {prp}                          Generate tests (TDD)
+4. /design test-validate {tests}                    Validate test syntax
+5. /design test-cohesion {tests}                    Verify test interactions
+6. /design ralph-check {prp}                        Verify PRP compliance
+  ↓ (MUST PASS)
+TEST SUITE + READY-TO-IMPLEMENT PRP
+  ↓
+7. /design run {prp}                                AI implements to spec
+  ↓
+IMPLEMENTATION
+  ↓
+8. Retrospective                                    Extract learnings
+  ↓
+LEARNINGS → System improvements
+```
+
+### Deliberate Path (complex/uncertain features) — Journey → Spec → PRP
+
+Use this when the approach is unclear, there are multiple valid architectures, or you need to think through options before committing.
+
+```
+INTENT
+  ↓
+0. /design spec {journey}                           Think through approach
   ↓
 1. /design stress-test {spec}                       Check COMPLETENESS
   ↓ (MUST PASS)
 2. /design validate {spec}                          Check CLARITY
   ↓ (MUST PASS)
-VALIDATED SPEC
-  ↓
 3. /design prp {spec}                               Compile to PRP
-4. /design check {prp}                              Verify PRP quality
-  ↓ (MUST PASS)
-EXECUTABLE PRP
   ↓
-5. /design implement {prp}                          Generate tests (TDD)
-6. /design test-validate {tests}                    Validate test syntax
-7. /design test-cohesion {tests}                    Verify test interactions
-8. /design ralph-check {prp}                        Verify PRP compliance
-  ↓ (MUST PASS)
-TEST SUITE + READY-TO-IMPLEMENT PRP
-  ↓
-9. /design run {prp}                                AI implements to spec
-  ↓
-IMPLEMENTATION
-  ↓
-10. Retrospective                                   Extract learnings
-  ↓
-LEARNINGS → System improvements
+... (same as Fast Path from step 2 onward)
 ```
+
+**When to use Deliberate Path:**
+- Multiple valid architectures (need to evaluate trade-offs)
+- New domain (team hasn't built this type of thing before)
+- High-risk changes (irreversible, affects many users)
+- Uncertain requirements (need to clarify before committing)
 
 ---
 
@@ -530,52 +561,43 @@ This skill is used by design systems engineers and implementation teams. You wil
 
 ### Command Workflow
 
-**MUST FOLLOW THIS ORDER** - each step catches different problems:
+**Fast Path (most features):**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  0. /design spec           "Generate spec FROM journey"         │
-│     └─► Creates: specs/{name}-spec.md from journey + personas   │
+│  1. /design prp            "Generate PRP from journey/intent"   │
+│     └─► Accepts: journey file, description, OR spec file        │
+│     └─► Embeds problem/journey context in PRP overview          │
+│     └─► Runs validation + stress-test internally                │
+│     └─► Runs dependency-trace (INV-L010, INV-L011)              │
 │                                                                 │
-│  1. /design stress-test    "Is the spec COMPLETE?"              │
-│     └─► Checks: invariant violations, coverage gaps, blockers   │
-│                                                                 │
-│  2. /design validate       "Is the spec CLEAR?"                 │
-│     └─► Checks: ambiguity, vague terms, implicit assumptions    │
-│                                                                 │
-│  3. /design prp            "Compile to PRP" (alias: generate)   │
-│     └─► Extracts: confidence, thinking level, verbatim content  │
-│     └─► **NEW: Runs dependency-trace (INV-L010, INV-L011)**     │
-│                                                                 │
-│  4. /design check          "Is the PRP READY?"                  │
-│     └─► Verifies: extraction completeness, source comparison    │
+│  2. /design check          "Is the PRP READY?"                  │
+│     └─► Verifies: extraction completeness, no placeholders      │
 │     └─► (Runs automatically after prp)                          │
 │                                                                 │
-│  5. /design dependency-trace "Are all deps covered?"            │
-│     └─► Verifies: TODO→deliverable, table→CREATE (INV-L010/11) │
-│     └─► BLOCKS if any gaps found                                │
+│  3. HUMAN REVIEWS          ← YOU approve before implementation  │
 │                                                                 │
-│  6. HUMAN REVIEWS          ← YOU approve before implementation  │
-│                                                                 │
-│  7. /design implement      "Generate tests (TDD mode)"          │
+│  4. /design implement      "Generate tests (TDD mode)"          │
 │     └─► Creates: test_NN.py, gate_N.py, conftest.py            │
 │     └─► NO step files - tests are the contract (INV-L007)       │
 │                                                                 │
-│  8. /design test-validate  "Are tests valid & complete?"        │
+│  5. /design test-validate  "Are tests valid & complete?"        │
 │     └─► Verifies: syntax, SC coverage, integration (INV-L008)   │
 │                                                                 │
-│  9. /design test-cohesion  "Do tests work together?"            │
+│  6. /design test-cohesion  "Do tests work together?"            │
 │     └─► Verifies: no duplicates, fixtures, imports (INV-L009)   │
 │                                                                 │
-│ 10. /design ralph-check    "Do tests match PRP?"                │
+│  7. /design ralph-check    "Do tests match PRP?"                │
 │     └─► Verifies: schema fields, routes, success criteria       │
 │                                                                 │
-│ 11. /design run            "AI writes code to pass tests"       │
+│  8. /design run            "AI writes code to pass tests"       │
 │     └─► AI coding agent implements, tests verify, iterate       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Don't skip steps.** Spec generates structure. Stress-test catches completeness. Validate catches clarity. All must pass before PRP generation.
+**Deliberate Path** adds steps before the PRP: `/design spec`, `/design stress-test`, `/design validate`. Use when the approach is uncertain.
+
+**Don't skip validation.** The PRP command runs validation internally. If it flags issues, fix them before proceeding.
 
 ---
 
@@ -635,9 +657,9 @@ Next steps:
 
 ---
 
-### /design spec {journey-file} [--output path]
+### /design spec {journey-file} [--output path] *(optional — Deliberate Path only)*
 
-Generate a specification from a user journey document. Extracts pain points, goals, and steps into functional requirements.
+Generate a specification from a user journey document. **Only needed when the approach is uncertain** — for most features, skip this and go directly to `/design prp`. Extracts pain points, goals, and steps into functional requirements.
 
 **Usage:**
 ```
@@ -842,15 +864,22 @@ REJECTED - Fix violations before proceeding
 
 ---
 
-### /design prp {spec-file} [--output path] (alias: generate)
+### /design prp {input} [--output path] (alias: generate)
 
-Generate a Product Requirements Prompt from a validated specification.
+Generate a Product Requirements Prompt from a journey, description, or spec. **This is the primary entry point for most features** — no separate spec needed.
+
+**Input types:**
+- **Journey file** (`.md` with user journey) — extracts problem, steps, and goals into PRP
+- **Inline description** (text string) — generates PRP from a brief feature description
+- **Spec file** (from Deliberate Path) — compiles validated spec into PRP
 
 **Usage:**
 ```
-/design prp specs/feature-spec.md
+/design prp "In-canvas line sheet editor — drag cards, edit text, export PDF"
+/design prp docs/design/journeys/checkout-flow.md
+/design prp specs/feature-spec.md                    # Deliberate Path
 /design prp specs/api-spec.md --output PRPs/api-prp.md
-/design prp specs/mobile-app.md --template user-feature
+/design prp journeys/mobile-app.md --template user-feature
 ```
 
 **Note:** The shell script uses `generate` as the command name:
@@ -866,14 +895,22 @@ Generate a Product Requirements Prompt from a validated specification.
 
 **Execution:**
 
-1. **Validate spec first:**
+1. **If input is a journey or description (Fast Path):**
+   - Extract problem statement, user steps, goals
+   - Run invariant validation on extracted requirements
+   - Run stress-test (completeness check) on extracted requirements
+   - If violations found: report and STOP (user must clarify)
+   - Embed journey context in PRP overview section (2-3 paragraphs)
+
+2. **If input is a spec (Deliberate Path):**
+   - Validate spec first:
 ```bash
 ./enforcement/validator.sh "{spec-file}" [--domain "{domain}"]
 # Abort if violations found
 ```
 
-2. **Gather context:**
-   - Read spec content
+3. **Gather context:**
+   - Read input content
    - Detect project type
    - Load CONVENTIONS.md if exists
    - Identify domain-specific requirements
@@ -890,45 +927,111 @@ Generate a Product Requirements Prompt from a validated specification.
 ./enforcement/prp-checker.sh "{output-file}"
 ```
 
-5. **Report confidence and next steps**
+5. **Red Team Pass (Devil's Advocate):**
+
+   After the PRP is generated, automatically run an adversarial review that tries to break it. This catches gaps that the generator is blind to — it wrote the PRP, so it can't see its own assumptions.
+
+   **The red team asks 7 questions:**
+
+   | # | Question | What It Catches |
+   |---|----------|-----------------|
+   | RT-1 | **What happens when X fails?** For every external call (API, DB, file, network), is there a failure path? | Missing error handling, silent failures |
+   | RT-2 | **What's the first thing that will break during implementation?** Walk through building this step by step — where does the implementer get stuck? | Unstated dependencies, ordering issues, missing context |
+   | RT-3 | **What did the PRP assume without saying?** List every implicit assumption (library exists, data format, user behavior, browser support). Sub-check: *State or references?* For every data structure that stores objects for later replay (undo stacks, caches, queues), ask: should we store serialized state (data) or live references? Serialized state implies round-trip capability — can the object be reconstructed synchronously from its serialization? If not (e.g., Canvas/DOM objects with embedded resources, async deserialization), store references instead. | Hidden assumptions that become bugs, type-system vs runtime lifecycle mismatches |
+   | RT-4 | **What's ambiguous enough to build two different things?** Find requirements where two competent developers would build different solutions. | Ambiguous requirements |
+   | RT-5 | **What edge cases are missing?** Empty states, max limits, concurrent access, Unicode, timezone, first-run vs Nth-run. | Untested edge cases |
+   | RT-6 | **What will the user actually do vs what the PRP expects?** Real users don't follow happy paths — what happens when they go off-script? | UX gaps, missing validation |
+   | RT-7 | **Is anything over-engineered?** Features nobody asked for, abstractions for one use case, premature optimization. | Scope creep, wasted effort |
+
+   **Severity levels:**
+   - **BLOCKING** — Cannot implement without resolving. Missing critical information. (Stops pipeline.)
+   - **RISK** — Can implement but likely to cause problems. Should address before implementation.
+   - **NOTE** — Worth knowing. Implementer should be aware.
+
+   **Output format:** Appends a `## Holes & Risks` section to the PRP:
+
+   ```markdown
+   ## Holes & Risks (Red Team Review)
+
+   _Auto-generated adversarial review. Address BLOCKING items before implementation._
+
+   ### BLOCKING
+
+   - **RT-2: Build order dependency.** Phase 2 references `canvas-history.ts` undo stack
+     but Phase 1 doesn't create it. Implementer will get stuck at Phase 2 Step 1.
+     **→ Move undo stack to Phase 1 or make Phase 2 not depend on it.**
+
+   ### RISK
+
+   - **RT-1: PDF export failure path.** FR-6.1 says "Export PDF renders current canvas
+     to PDF" but no failure handling if sharp/resvg crashes on malformed SVG.
+     **→ Add: on export failure, show error toast and offer SVG download as fallback.**
+
+   - **RT-5: Empty canvas.** What if user deletes ALL cards? Canvas is blank.
+     No mention of empty state behavior. **→ Define: show "No styles remaining" message
+     with an Undo button.**
+
+   ### NOTE
+
+   - **RT-3: Assumes Fabric.js handles our SVG.** The PRP says "Fabric.js can parse
+     our SVG directly" but our SVG uses custom `id` attributes and nested groups.
+     Fabric.js may flatten or lose group structure. **→ Test SVG import early in Phase 1.**
+
+   - **RT-3 (state vs references): Delete command stores `objectState: Record<string, unknown>`
+     — implies JSON serialization via `toJSON()`. But restoring a Fabric.js object from
+     JSON requires async `fabric.util.enlivenObjects`, and `applyReverse` is synchronous.**
+     A disciplined implementer will stub it rather than break the type contract. **→ Store
+     the live object reference, not serialized state. `canvas.remove()` keeps the object
+     alive; `canvas.add(obj)` restores it exactly — images, styles, positions intact,
+     no serialization overhead, synchronous.**
+
+   - **RT-7: Multi-select (FR-2.4) adds complexity.** Karen's workflow is single-card
+     moves. Multi-select is nice-to-have. **→ Consider deferring to Phase 4.**
+   ```
+
+   **Blocking behavior:**
+   - If ANY finding is **BLOCKING**: pipeline stops. User must resolve before `/design implement`.
+   - **RISK** and **NOTE** findings are appended to PRP and carried forward — implementer sees them.
+
+6. **Report confidence and next steps**
 
 **Output:**
 ```
-Spec-to-PRP Generation
-======================
+PRP Generation
+==============
 
-Reading spec: specs/my-feature.md
-Validating... PASSED (0 violations, 2 warnings)
+Reading input: journeys/canvas-editor.md
+Extracting requirements... 7 FRs, 4 NFRs, 10 success criteria
 
-Extracting project information...
-  Project: My Feature Name
-  Type: user-feature (auto-detected)
-  Timeline hint: 2 weeks
-
-Loading template: user-feature
-Substituting variables...
-  - PRP_ID: PRP-2026-01-19-042
-  - Project name: My Feature Name
-  - Validation date: 2026-01-19
-  - Remaining placeholders: 24
+Generating PRP...
+  Template: user-feature (auto-detected)
+  PRP_ID: PRP-2026-02-17-001
 
 Running quality check...
   Required sections: PASS
-  Quality score: 72/100
+  Quality score: 82/100
 
-OUTPUT: PRPs/my-feature-prp.md
+Running red team pass...
+  RT-1 (failure paths):  1 RISK found
+  RT-2 (build order):    1 BLOCKING found
+  RT-3 (assumptions):    1 NOTE found
+  RT-4 (ambiguity):      0 findings
+  RT-5 (edge cases):     1 RISK found
+  RT-6 (user behavior):  0 findings
+  RT-7 (over-engineering): 1 NOTE found
 
-Placeholders to fill:
-  Line 32: [FILL_THIS_IN] - Problem statement
-  Line 48: [FILL_THIS_IN] - Primary metric
-  Line 65: [FILL_THIS_IN] - Phase 1 owner
-  ... and 21 more
+  ⛔ 1 BLOCKING finding — must resolve before implementation
+
+OUTPUT: PRPs/canvas-editor-prp.md
+
+Red team findings appended to PRP.
 
 Next steps:
-1. Open PRPs/my-feature-prp.md
-2. Fill all [FILL_THIS_IN] placeholders
-3. Run: /design check PRPs/my-feature-prp.md
-4. Begin execution with validation gates
+1. Open PRPs/canvas-editor-prp.md
+2. Resolve BLOCKING item (build order dependency)
+3. Review RISK items (2 findings)
+4. Run: /design check PRPs/canvas-editor-prp.md
+5. Begin execution with /design implement
 ```
 
 ---
@@ -3102,43 +3205,24 @@ Next action: Fix step 13, then run: /design run 13
          ┌───────────────────────────────────────────────┐
          │                                               │
          ▼                                               │
-    [Research]                                           │
+    [Journey / Intent / Problem Statement]               │
          │                                               │
          ▼                                               │
-    [Personas & Journeys]                                │
-         │                                               │
-         ▼                                               │
-┌─────────────────────┐                                  │
-│   Write Spec        │                                  │
-│   (Human intent)    │                                  │
-└─────────────────────┘                                  │
-         │                                               │
-         ▼                                               │
-┌─────────────────────┐     FAIL                         │
-│ /design validate    │ ────────────────┐                │
-│                     │                 │                │
-└─────────────────────┘                 │                │
-         │                              │                │
-         │ PASS                         ▼                │
-         │                    ┌─────────────────┐        │
-         │                    │   Fix Spec      │        │
-         │                    │   (address      │        │
-         │                    │   violations)   │        │
+┌─────────────────────┐     ISSUES                       │
+│   /design prp       │ ────────────────┐                │
+│   (journey → PRP)   │                 │                │
+│   validates inline  │                 ▼                │
+└─────────────────────┘       ┌─────────────────┐        │
+         │                    │   Clarify intent │        │
+         │ PASS               │   (fix issues)   │        │
          │                    └─────────────────┘        │
-         │                              │                │
          │                              │                │
          │◄─────────────────────────────┘                │
          │                                               │
          ▼                                               │
 ┌─────────────────────┐                                  │
-│   /design prp       │                                  │
-│   (compile to PRP)  │                                  │
-└─────────────────────┘                                  │
-         │                                               │
-         ▼                                               │
-┌─────────────────────┐                                  │
-│   Fill Placeholders │                                  │
-│   (human review)    │                                  │
+│   Human Review      │                                  │
+│   (approve PRP)     │                                  │
 └─────────────────────┘                                  │
          │                                               │
          ▼                                               │
@@ -3472,6 +3556,8 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.5 | 2026-02-17 | **Red Team Pass (Devil's Advocate).** `/design prp` now auto-runs an adversarial review after generating the PRP. 7 red team questions check for missing failure paths, build order issues, hidden assumptions, ambiguity, edge cases, UX gaps, and over-engineering. BLOCKING findings stop the pipeline. Findings appended as `## Holes & Risks` section in PRP. |
+| 2.4 | 2026-02-17 | **Journey → PRP direct path.** Specs are now optional (Deliberate Path only). `/design prp` accepts journeys, descriptions, or specs directly. Validation and stress-testing built into PRP generation. Streamlined pipeline from 11 steps to 8 for the common case. |
 | 2.3 | 2026-01-29 | **Implementation Enforcement Invariants** - Added INV-IMPL-001 through INV-IMPL-005 to prevent Claude Code shortcuts. Added mandatory integration testing after API changes. Added commit gate with evidence requirements. Added explicit "show your work" proof requirements for Playwright verification. |
 | 2.2 | 2026-01-22 | Added `/design spec` for journey-to-spec generation, unified workflow |
 | 2.1 | 2026-01-20 | Ralph Methodology for atomic implementation (implement, run, gate, status commands) |
@@ -3485,10 +3571,10 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 | Command | Purpose | Key Output |
 |---------|---------|------------|
 | `/design init {name}` | Bootstrap project | Folder structure + templates |
-| `/design spec {journey}` | Generate spec from journey | Structured spec with FRs |
-| `/design stress-test {spec}` | Check completeness | Invariant violations, gaps |
-| `/design validate {spec}` | Check clarity | PASS/FAIL + fix suggestions |
-| `/design prp {spec}` | Generate PRP (alias: generate) | Compiled PRP + quality score |
+| `/design prp {journey\|desc\|spec}` | **Generate PRP (primary entry point)** | Compiled PRP + quality score |
+| `/design spec {journey}` | *(optional)* Think through approach | Structured spec with FRs |
+| `/design stress-test {spec}` | *(optional)* Check completeness | Invariant violations, gaps |
+| `/design validate {spec}` | *(optional)* Check clarity | PASS/FAIL + fix suggestions |
 | `/design check {prp}` | Verify PRP ready | Extraction completeness |
 | `/design implement {prp}` | Generate Ralph steps | Atomic steps + tests + gates |
 | `/design ralph-check {prp}` | Verify steps match PRP | Schema/route compliance |
@@ -3508,8 +3594,8 @@ User: "/design review specs/stripe-integration.md ./src/payments/"
 
 ---
 
-*Skill version: 2.3*
-*Last updated: 2026-01-29*
+*Skill version: 2.5*
+*Last updated: 2026-02-17*
 *Enforcement tools: validator.sh v1.1, spec-to-prp.sh v1.1, prp-checker.sh v1.0*
 *Multi-agent system: spec-analyst, validator, prp-generator, reviewer, retrospective*
 *Continuous validation: watch-mode, continuous-validator, validation-dashboard*
