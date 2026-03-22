@@ -340,6 +340,23 @@ grep -r "params:" src/app/api/ | grep -v "Promise<" | grep -v "await params"
 
 ---
 
+### DESIGN-001: Deep Modules
+
+**Principle**: Modules must have small interfaces and deep implementations (Ousterhout, "A Philosophy of Software Design").
+
+**Violation**: Wide interface with shallow implementation — lots of knobs exposed, little work done inside.
+
+**Examples**:
+- ❌ Helper function that takes 8 params and does a 3-line transform
+- ❌ Component with 12 props that just wraps another component
+- ❌ Service class where every internal method is public
+- ✅ `processOrder(orderId)` — one input, handles validation/state/persistence/notification internally
+- ✅ `<PhotoImporter seasonId={id} />` — small surface, handles upload/resize/classify/link inside
+
+**Enforcement**: During code review and `/design build`, flag modules where interface complexity ≥ implementation complexity. Public API surface should be small relative to internal logic. Wide-and-shallow → REFACTOR.
+
+---
+
 ### GEN-001: Clean Code Generation
 
 **Principle**: When using CLI tools to generate code files, stderr must be separated from stdout.
@@ -458,6 +475,7 @@ New invariants come from Spec Deltas only. Process:
 | **TYPE-002** | **Schema-Type Parity** | **All schema fields in TypeScript** |
 | **TYPE-003** | **No `as any` for Known Tables** | **`.from()` without `as any`** |
 | **FRAME-001** | **Framework Version Awareness** | **Correct params signature** |
+| **DESIGN-001** | **Deep Modules** | **Small interface, deep implementation** |
 | **GEN-001** | **Clean Code Generation** | **No stderr in generated files** |
 
 ---
@@ -465,6 +483,7 @@ New invariants come from Spec Deltas only. Process:
 *Last updated: 2026-02-01*
 *Core invariants: 11*
 *Type invariants: 3*
+*Design invariants: 1*
 *Framework invariants: 1*
 *Generation invariants: 1*
 *Domain invariants: See domain files*

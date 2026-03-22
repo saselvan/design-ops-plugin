@@ -57,7 +57,15 @@ Interactive exploration before PRP generation. LARGE tier only.
 2. Explore the codebase for relevant patterns and conventions
 3. Run `/grill-me` — devil's advocate walks the decision tree, challenges assumptions
 4. Resolve each branch interactively
-5. **Write a decisions log file** (not just conversation — survives context compression)
+5. **Parallel interface exploration** (when a key module boundary is identified):
+   - Spawn 3+ parallel sub-agents, each with a different design constraint:
+     - **(a) Minimize interface** — fewest possible params/props/methods
+     - **(b) Maximize flexibility** — generic, composable, extensible
+     - **(c) Optimize for common caller** — ergonomic for the 80% use case
+     - **(d) Ports & adapters** — abstract external dependencies behind owned interfaces
+   - Each agent outputs: interface signature, usage example, hidden complexity, trade-offs
+   - Present designs to user, compare in prose, pick one
+6. **Write a decisions log file** (not just conversation — survives context compression)
 
 **Output:** Decisions log file at `docs/design/discoveries/{feature-name}.md`:
 
@@ -68,6 +76,12 @@ Date: {date}
 ## Decisions
 1. {Decision 1} — {rationale}
 2. {Decision 2} — {rationale}
+
+## Interface Alternatives Explored
+| Constraint | Interface | Chosen? | Why/Why Not |
+|------------|-----------|---------|-------------|
+| Minimize interface | `fn(id)` | ✓ | Simplest, hides complexity |
+| Maximize flexibility | `fn(id, opts)` | ✗ | YAGNI for current scope |
 
 ## Open Questions
 - {Unresolved question}
@@ -142,10 +156,12 @@ True TDD per issue. Replaces the old `/design implement` + `/design run` split.
 3. Write minimal code to pass                        (GREEN)
 4. Run integration test (this + all previous issues)
 5. Run e2e smoke test (if within domain time budget)
-6. Refactor if needed
+6. Refactor if needed                                (REFACTOR — GREEN only!)
 7. Commit
 8. Next issue
 ```
+
+**Hard rule: NEVER refactor while RED.** If tests are failing, your only job is to make them pass. Refactoring (extracting duplication, renaming, restructuring) happens ONLY after GREEN. Mixing refactoring with fixing breaks the feedback loop — you can't tell if a new failure is from your fix or your refactor.
 
 **Progress-based circuit breaker:**
 ```
@@ -170,6 +186,8 @@ Contract test    → Does output match the defined interface?
 Integration test → Does this issue work WITH previous issues?
 E2E smoke test   → Does the full workflow still work?
 ```
+
+**Replace, don't layer.** When a refactor deepens a module (consolidating multiple shallow modules into one with a smaller interface), DELETE the old shallow-module unit tests and replace them with boundary tests on the new interface. Test at the interface boundary, assert on observable outcomes. Tests must survive internal refactors — if renaming a private helper breaks a test, that test was testing implementation, not behavior. This prevents test bloat and keeps the test suite as a reliable change detector, not a change preventer.
 
 **Implementation invariants (Claude Code specific):**
 - API contract changes → test ALL consumers (INV-IMPL-001)
@@ -210,6 +228,19 @@ Extract learnings after implementation. **Only run when something surprised you.
 - Should the confidence rubric be updated?
 
 **Rule:** New invariants come from pain, not theory. Must cite the specific failure it would have prevented.
+
+---
+
+### /evolve {skill-name}
+
+Self-improving loop for individual skills. **Separate skill** — see `~/.claude/skills/evolve/SKILL.md`.
+
+Use this for leaf-level skills (`/art`, `/capture`, `/write`, etc.) where outputs are fast and evaluable. **Do NOT use for design-ops itself** — the pipeline is too slow for hill climbing.
+
+Quick reference:
+- `/evolve evals {skill-name}` — generate binary evals for a skill
+- `/evolve {skill-name} --runs 5 --rounds 3` — run the evolution loop
+- `/evolve status {skill-name}` — view evolution history
 
 ---
 
@@ -324,6 +355,7 @@ Loaded from `.designops` config. Healthcare and security domains are **BLOCKING*
 | TYPE-002 | TypeScript interfaces must match DB schema nullability |
 | TYPE-003 | No `as any` for known tables |
 | FRAME-001 | Use correct framework version patterns |
+| DESIGN-001 | Deep modules: small interface, deep implementation |
 | INV-IMPL-001 | API contract changes → test all consumers |
 | INV-IMPL-002 | Verification evidence required (snapshots, not claims) |
 
