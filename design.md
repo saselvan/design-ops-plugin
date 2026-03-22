@@ -1,14 +1,24 @@
 ---
 name: design
-description: "Design Ops v3. Journey → PRP → Issues → TDD. Tiered pipeline with invariant enforcement, devil's advocate, and e2e testing. USE WHEN design, PRP, validate, requirements, init project, review implementation."
-version: "3.0"
+description: "Design Ops v3.1. Journey → PRP → Issues → TDD. Tiered pipeline with invariant enforcement, devil's advocate, and e2e testing. USE WHEN design, PRP, validate, requirements, init project, review implementation."
+version: "3.1"
 ---
 
-# Design Ops v3
+# Design Ops v3.1
 
-Journey → PRP → Issues → TDD. Three tiers, not eleven steps.
+Journey → PRP → Issues → TDD. Three tiers. PRP defines WHAT. Issues define HOW.
 
-See `~/.claude/design-ops/SKILL.md` for full command reference and pipeline details.
+See `~/.claude/design-ops/SKILL.md` for full command reference.
+
+---
+
+## IMPORTANT: Tier Proposal
+
+At the start of ANY coding task, you MUST propose a tier and wait for confirmation:
+
+> "This looks like a **MEDIUM** task — want me to generate a PRP, or just implement with tests?"
+
+Do not skip this. Do not default to SMALL to avoid overhead. Do not nag about PRPs for genuinely small work.
 
 ---
 
@@ -19,90 +29,118 @@ SMALL (< 1 file, obvious scope):
   → Just implement with tests.
 
 MEDIUM (multi-file, < 1 day):
-  → /design prp {journey}        Generate PRP (validation built in)
-  → /design implement {prp}      Generate tests (TDD, vertical slices)
-  → /design run {prp}            AI implements per slice
+  → /design prp {journey}        Generate PRP + red-team + auto-validate
+  → /prp-to-issues {prp}         Interactive vertical slicing → GitHub issues
+  → /design build                 TDD per issue (red-green-refactor)
 
 LARGE (multi-day, high risk, new domain):
-  → /design discover {journey}   Explore + grill-me (devil's advocate)
-  → /design prp {journey}        Generate PRP + red-team review
-  → /design verify {prp}         Single quality gate
-  → /design implement {prp}      Tests per vertical slice
-  → /design run {prp}            AI implements per slice
+  → /design discover {journey}   Explore + grill-me → decisions log FILE
+  → /design prp {journey}        Generate PRP + red-team + auto-validate
+  → /prp-to-issues {prp}         Interactive vertical slicing → GitHub issues
+  → /design build                 TDD per issue (red-green-refactor)
   → /design retro                Only if something surprised you
 ```
 
 ---
 
-## When to Use Each Tier
+## Key Design Principles
 
-| Signal | Tier |
-|--------|------|
-| Bug fix, add a field, simple UI change | SMALL — just do it with tests |
-| New page, new feature, multi-file change | MEDIUM — PRP keeps you honest |
-| New architecture, compliance-critical, unknown domain | LARGE — explore first |
-| Confidence score < 5 | Escalate to LARGE |
+### PRP = WHAT. Issues = HOW.
+
+The PRP defines scope, success criteria, dependencies, and risks. It does NOT contain vertical slices. Vertical slicing happens in `/prp-to-issues` through an interactive quiz. `/design build` implements per issue, not per PRP section.
+
+### Red-team runs for MEDIUM and LARGE
+
+Every PRP gets 7 adversarial questions. No PRP ships without challenge.
+
+### Auto-validation
+
+`validate-prp.sh` runs automatically after every `/design prp`. No separate `/design verify` step needed.
+
+### Hard gate on Red confidence
+
+Confidence score < 4 (Red) = HARD STOP. Cannot proceed without explicit human override ("proceed with risk"). Claude cannot bypass this.
+
+### True TDD per issue
+
+`/design build` does red-green-refactor ONE ISSUE AT A TIME. No "generate all tests then implement everything." Each issue's implementation informs the next issue's tests.
+
+### Progress-based circuit breaker
+
+During `/design build`, if 2 consecutive attempts produce identical failures → STOP and diagnose whether the problem is in the code, the issue, or the PRP. Hard max: 5 attempts.
+
+### Completion summary
+
+`/design build` ends with a summary listing which success criteria are proven by tests vs. which require production observation. Clear definition of "done."
 
 ---
 
-## Two Agents (Not Six)
+## Two Agents
 
-| Agent | What it does | When it runs |
-|-------|-------------|-------------|
-| **validator** | Checks PRP against universal invariants (1-10) + domain invariants. Flags violations as BLOCKING (universal, healthcare, security) or ADVISORY (other domains). | During `/design prp` |
-| **red-team** | Devil's advocate. 7 adversarial questions: missing failure paths, hidden assumptions, edge cases, build order deps, integration risks, over-engineering, UX gaps. BLOCKING findings halt the pipeline. | During `/design prp` (LARGE tier only) |
-
-The old spec-analyst, CONVENTIONS-checker, reviewer, prp-generator, and ralph-checker are consolidated. Codebase pattern detection happens during `/design prp` and `/design implement` — it doesn't need a named agent.
+| Agent | What it does | When |
+|-------|-------------|------|
+| **validator** | Invariant enforcement (universal blocking, domain advisory/blocking) | During `/design prp` |
+| **red-team** | 7 adversarial questions. Blocking findings halt pipeline. | During `/design prp` (MEDIUM + LARGE) |
 
 ---
 
 ## PRP Structure (6 Core Sections)
 
-Every PRP has these sections. Domain extensions are added based on the project.
-
-1. **Meta + Confidence Score** — risk quantification (1-10)
+1. **Meta + Confidence Score** — domain, risk (1-10), tier
 2. **Problem & Solution** — what's broken, what we're building, scope
-3. **Success Criteria** — pseudo-code conditions (SUCCESS := ALL(...))
-4. **Vertical Slices** — thin end-to-end paths with acceptance criteria and validation gates
+3. **Success Criteria** — SUCCESS := ALL(...), FAILURE := ANY(...)
+4. **Scope & Dependencies** — components, relationships, dependency map
 5. **Risks & Fallbacks** — circuit breakers, degradation paths
-6. **Validation Commands** — per-slice, integration, e2e smoke test, build/quality
+6. **Validation Commands** — integration test, e2e smoke test (domain-specific), build/quality
 
-Domain extensions (appended when relevant):
-- **Healthcare/HLS**: Compliance, PHI handling, data governance
-- **Data Architecture**: Pipeline contracts, data quality gates, lineage
-- **Consumer Product**: Accessibility (WCAG 2.1 AA), performance budgets
-- **Integration**: API contracts, retry/circuit breaker patterns
-- **Physical Construction**: Material specs, inspection gates
-
-Template: `~/.claude/design-ops/templates/prp-template.md`
+Domain extensions appended per `.designops` config.
 
 ---
 
-## Integration Testing (The Gap v2 Missed)
+## Domain Configuration
 
-**Problem:** Unit tests pass but the system is broken. Components work in isolation but don't integrate.
+Per-project `.designops` file. Auto-loaded by `/design prp`.
 
-**Solution:** Testing pyramid per vertical slice:
-
-```
-After each slice:
-  1. Unit tests      → Does this slice's logic work?
-  2. Contract test   → Does output match the defined interface?
-  3. Integration test → Does this slice work WITH previous slices?
-  4. E2E smoke test  → Does the full user workflow still work?
-
-ALL FOUR must pass before the slice is complete.
+```yaml
+domains:
+  - healthcare-ai
+  - data-architecture
+e2e:
+  tool: pytest
+  time_budget: 300s
+  run_frequency: every_slice
 ```
 
-During `/design run`, the AI implements ONE SLICE AT A TIME:
+Healthcare and security domains enforce ALL invariants as BLOCKING.
+
+---
+
+## E2E Smoke Test (Domain-Specific)
+
+| Domain | Tool | Time budget |
+|--------|------|-------------|
+| consumer-product | Playwright | 30-120s |
+| data-architecture | pytest / notebook | 60-300s |
+| healthcare-ai | pytest + audit | 120-600s |
+| integration | pytest / curl | 15-60s |
+| physical-construction | manual checklist | N/A |
+
+If e2e exceeds time budget → run every 2-3 issues, always at final completion.
+
+---
+
+## Integration Testing
+
+Testing pyramid per issue during `/design build`:
+
 ```
-RED:    Run slice's failing tests
-GREEN:  Write minimal code to pass
-VERIFY: Run integration test (this slice + all previous)
-VERIFY: Run e2e smoke test
-REFACTOR: Clean up if needed
-NEXT:   Move to next slice
+1. Unit tests       → Does this issue's logic work?
+2. Contract test    → Does output match the defined interface?
+3. Integration test → Does this work WITH previous issues?
+4. E2E smoke test   → Does the full workflow still work?
 ```
+
+All four must pass before moving to the next issue.
 
 ---
 
@@ -110,80 +148,45 @@ NEXT:   Move to next slice
 
 ### Universal (1-10) — Always blocking
 
-1. Ambiguity is Invalid — terms need operational definitions
-2. State Must Be Explicit — before→action→after
-3. Emotional Intent Must Compile — "feel X" := concrete mechanism
-4. No Irreversible Without Recovery — destructive actions need escape hatch
-5. Execution Must Fail Loudly — no silent failures
-6. Scope Must Be Bounded — no unbounded operations
-7. Validation Must Be Executable — measurable criteria only
-8. Cost Boundaries Explicit — limits on resources
-9. Blast Radius Declared — write ops state what they affect
-10. Degradation Path Exists — external deps have fallbacks
+1. Ambiguity is Invalid
+2. State Must Be Explicit
+3. Emotional Intent Must Compile
+4. No Irreversible Without Recovery
+5. Execution Must Fail Loudly
+6. Scope Must Be Bounded
+7. Validation Must Be Executable
+8. Cost Boundaries Explicit
+9. Blast Radius Declared
+10. Degradation Path Exists
 
 Full definitions: `~/.claude/design-ops/system-invariants.md`
 
-### Domain Invariants — Advisory (except healthcare/security which are blocking)
+### Domain — Advisory (healthcare/security = blocking)
 
-Loaded per project from `~/.claude/design-ops/domains/`. See domain selection guide in SKILL.md.
+Loaded from `~/.claude/design-ops/domains/` per `.designops` config.
 
-### Code-Level Invariants — During implementation
+### Code-Level — During `/design build`
 
-- TYPE-001: Single type source (one canonical location per interface)
-- TYPE-002: Schema-type parity (TS matches DB nullability)
+- TYPE-001: Single type source
+- TYPE-002: Schema-type parity
 - TYPE-003: No `as any` for known tables
 - FRAME-001: Framework version awareness
 - INV-IMPL-001: API changes → test all consumers
-- INV-IMPL-002: Verification evidence required (snapshots, not claims)
+- INV-IMPL-002: Verification evidence required
 
 ---
 
 ## Component Contracts
 
-When a module is consumed by another module, define its contract:
-- Input types and constraints
-- Output types and guarantees
-- List of consumers
-- Breaking change rules
-
-Integration tests verify contracts across slice boundaries. This prevents the class of bug where "all tests pass but the system is broken."
+Modules consumed by other modules define: input types, output guarantees, consumer list, breaking change rules. Integration tests verify contracts across issue boundaries.
 
 ---
 
-## Confidence Scoring
+## `/design discover` Output
 
-| Factor | Weight |
-|--------|--------|
-| Requirement Clarity | 30% |
-| Pattern Availability | 25% |
-| Test Coverage Plan | 20% |
-| Edge Case Handling | 15% |
-| Tech Familiarity | 10% |
-
-Score 1-3 (Red) → STOP, fix gaps, use LARGE tier.
-Score 4-6 (Yellow) → PROCEED with risk acknowledgment.
-Score 7-9 (Green) → PROCEED normally.
-
-Rubric: `~/.claude/design-ops/templates/confidence-rubric.md`
+Writes a decisions log to `docs/design/discoveries/{feature}.md`. Not conversation-only — file survives context compression. `/design prp` reads this file as input.
 
 ---
 
-## What Changed from v2
-
-| v2 (11-step pipeline) | v3 (3-tier pipeline) |
-|---|---|
-| Spec required before PRP | Specs eliminated — journey → PRP directly |
-| 5 validation steps | 1 validation step (built into PRP generation) |
-| 6 named agents | 2 agents (validator + red-team) |
-| 11-section PRP template | 6-section PRP + domain extensions |
-| No fast path | 3 tiers: small/medium/large |
-| Component tests only | Testing pyramid: unit → contract → integration → e2e |
-| Stress-test + validate separate | Merged into PRP generation |
-| test-validate + test-cohesion + ralph-check separate | Merged into single verify step |
-| Freshness check (monthly) | Removed — update when something breaks |
-| Enforcement bash scripts | Removed — invariants enforced by the AI during PRP generation |
-
----
-
-**Version**: 3.0
+**Version**: 3.1
 **Last updated**: 2026-03-22

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# validate-prp.sh — Lightweight PRP validator for Design Ops v3
+# validate-prp.sh — Lightweight PRP validator for Design Ops v3.1
 #
 # Checks a PRP file against invariants and completeness requirements.
 # Portable: requires only bash, grep, awk. No external dependencies.
@@ -13,6 +13,7 @@
 #   0 = PASS (all checks passed)
 #   1 = WARN (advisory issues found)
 #   2 = FAIL (blocking issues found)
+#   3 = HARD STOP (Red confidence score — requires human override)
 
 set -euo pipefail
 
@@ -20,6 +21,7 @@ RED='\033[0;31m'
 YELLOW='\033[0;33m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 PRP_FILE="${1:-}"
@@ -38,6 +40,7 @@ fi
 ERRORS=0
 WARNINGS=0
 CHECKS=0
+HARD_STOP=0
 
 pass() {
     CHECKS=$((CHECKS + 1))
@@ -56,7 +59,13 @@ fail() {
     echo -e "  ${RED}✗${NC} $1"
 }
 
-echo -e "${CYAN}━━━ PRP Validator v3 ━━━${NC}"
+hard_stop() {
+    CHECKS=$((CHECKS + 1))
+    HARD_STOP=1
+    echo -e "  ${RED}${BOLD}⛔ HARD STOP${NC} $1"
+}
+
+echo -e "${CYAN}━━━ PRP Validator v3.1 ━━━${NC}"
 echo "File: $PRP_FILE"
 echo ""
 
@@ -64,7 +73,6 @@ echo ""
 
 echo -e "${CYAN}Structure${NC}"
 
-# Check for required sections (flexible matching for v2/v3 formats)
 check_section() {
     local label="$1"
     shift
@@ -77,12 +85,12 @@ check_section() {
     fail "Missing section: $label"
 }
 
-check_section "Meta/Header"         "^## Meta" "^##.*Meta" "confidence_score:"
-check_section "Problem/Overview"    "^##.*Problem" "^##.*Project Overview" "^##.*Overview"
-check_section "Success Criteria"    "^##.*Success" "SUCCESS :=" "success.criter"
-check_section "Slices/Timeline"     "^##.*Vertical" "^### Slice" "^##.*Timeline" "^### Phase "
-check_section "Risks/Fallbacks"     "^##.*Risk" "circuit.breaker" "fallback"
-check_section "Validation Commands" "^##.*Validation" "bash"
+check_section "Meta/Header"           "^## Meta" "^##.*Meta" "confidence_score:"
+check_section "Problem/Overview"      "^##.*Problem" "^##.*Project Overview" "^##.*Overview"
+check_section "Success Criteria"      "^##.*Success" "SUCCESS :=" "success.criter"
+check_section "Scope & Dependencies"  "^##.*Scope" "^##.*Depend" "^##.*Component" "dependency.map\|CONSUMERS:"
+check_section "Risks/Fallbacks"       "^##.*Risk" "circuit.breaker" "fallback"
+check_section "Validation Commands"   "^##.*Validation" "bash"
 
 # ─── SECTION 2: Unfilled placeholders ──────────────────────────────
 
@@ -111,11 +119,10 @@ echo -e "${CYAN}Confidence${NC}"
 if grep -q 'confidence_score:' "$PRP_FILE" 2>/dev/null; then
     score=$(grep 'confidence_score:' "$PRP_FILE" | head -1 | grep -oE '[0-9]+\.?[0-9]*' | head -1)
     if [[ -n "$score" ]]; then
-        # Check if score is a number and in range
         if awk "BEGIN {exit !($score >= 1.0 && $score <= 10.0)}" 2>/dev/null; then
             pass "Confidence score: $score/10"
             if awk "BEGIN {exit !($score < 4.0)}" 2>/dev/null; then
-                fail "Confidence score is RED ($score). STOP and address gaps before proceeding."
+                hard_stop "Confidence score is RED ($score). Pipeline BLOCKED. To proceed, human must explicitly type 'proceed with risk'."
             elif awk "BEGIN {exit !($score < 7.0)}" 2>/dev/null; then
                 warn "Confidence score is YELLOW ($score). Proceed with explicit risk acknowledgment."
             fi
@@ -129,7 +136,6 @@ else
     fail "No confidence_score found in Meta section"
 fi
 
-# Check for breakdown
 if grep -q 'requirement_clarity:' "$PRP_FILE" 2>/dev/null; then
     pass "Confidence breakdown present"
 else
@@ -153,30 +159,37 @@ else
     warn "No FAILURE := conditions found"
 fi
 
-# ─── SECTION 5: Vertical slices ────────────────────────────────────
-
-echo ""
-echo -e "${CYAN}Vertical Slices${NC}"
-
-slice_count=$(grep -c '### Slice [0-9]' "$PRP_FILE" 2>/dev/null || true)
-if [[ "$slice_count" -gt 0 ]]; then
-    pass "$slice_count vertical slice(s) defined"
+# Check for provable-by-test markers
+if grep -qi 'provable.*test\|verified.*by\|observe.*prod' "$PRP_FILE" 2>/dev/null; then
+    pass "Success criteria tagged as provable/observable"
 else
-    # Try alternative heading patterns
-    alt_count=$(grep -c '### Phase [0-9]\|### Step [0-9]' "$PRP_FILE" 2>/dev/null || true)
-    if [[ "$alt_count" -gt 0 ]]; then
-        pass "$alt_count phase/step(s) found (consider renaming to 'Slice' for v3 format)"
-    else
-        fail "No vertical slices found"
-    fi
+    warn "Success criteria not tagged as 'provable by test' vs 'observe in prod'"
 fi
 
-# Check acceptance criteria exist
-ac_count=$(grep -c '\- \[ \]' "$PRP_FILE" 2>/dev/null || true)
-if [[ "$ac_count" -gt 0 ]]; then
-    pass "$ac_count acceptance criteria checkboxes"
+# ─── SECTION 5: Scope & Dependencies ──────────────────────────────
+
+echo ""
+echo -e "${CYAN}Scope & Dependencies${NC}"
+
+# Check for component listing
+if grep -qiE 'component|module' "$PRP_FILE" 2>/dev/null; then
+    pass "Components/modules listed"
 else
-    warn "No acceptance criteria checkboxes found (expected - [ ] items)"
+    warn "No components or modules listed"
+fi
+
+# Check for dependency map
+if grep -qiE 'dependency.map|depends.on|CONSUMERS:|→.*produces' "$PRP_FILE" 2>/dev/null; then
+    pass "Dependency relationships defined"
+else
+    warn "No dependency map found — needed for vertical slicing in /prp-to-issues"
+fi
+
+# Check for component contracts
+if grep -qiE 'contract|interface|output.*type|input.*type|CONSUMERS:' "$PRP_FILE" 2>/dev/null; then
+    pass "Component contracts/interfaces defined"
+else
+    warn "No component contracts — integration tests need these"
 fi
 
 # ─── SECTION 6: Validation commands ────────────────────────────────
@@ -195,11 +208,11 @@ fi
 if grep -qi 'e2e\|smoke.test\|end.to.end\|full.*workflow' "$PRP_FILE" 2>/dev/null; then
     pass "E2E / smoke test referenced"
 else
-    warn "No e2e smoke test mentioned — consider adding one"
+    warn "No e2e smoke test mentioned — define per domain in .designops"
 fi
 
 # Check for integration test
-if grep -qi 'integration.test\|slices.*together\|work.*together' "$PRP_FILE" 2>/dev/null; then
+if grep -qi 'integration.test\|work.*together\|components.*together' "$PRP_FILE" 2>/dev/null; then
     pass "Integration testing referenced"
 else
     warn "No integration testing mentioned"
@@ -210,7 +223,7 @@ fi
 echo ""
 echo -e "${CYAN}Invariant Signals${NC}"
 
-# #1 Ambiguity: flag vague terms without definitions
+# #1 Ambiguity
 ambiguous_terms=("properly" "easily" "quality" "user-friendly" "intuitive" "good" "simple" "nice")
 ambig_found=0
 for term in "${ambiguous_terms[@]}"; do
@@ -276,12 +289,19 @@ fi
 echo ""
 echo -e "${CYAN}━━━ Summary ━━━${NC}"
 echo "  Checks: $CHECKS"
-echo -e "  Passed: ${GREEN}$((CHECKS - ERRORS - WARNINGS))${NC}"
+echo -e "  Passed: ${GREEN}$((CHECKS - ERRORS - WARNINGS - HARD_STOP))${NC}"
 echo -e "  Warnings: ${YELLOW}$WARNINGS${NC}"
 echo -e "  Errors: ${RED}$ERRORS${NC}"
+if [[ "$HARD_STOP" -gt 0 ]]; then
+    echo -e "  Hard stops: ${RED}${BOLD}$HARD_STOP${NC}"
+fi
 echo ""
 
-if [[ "$ERRORS" -gt 0 ]]; then
+if [[ "$HARD_STOP" -gt 0 ]]; then
+    echo -e "${RED}${BOLD}RESULT: HARD STOP${NC} — Red confidence score. Pipeline BLOCKED."
+    echo -e "Human must explicitly acknowledge risk before proceeding."
+    exit 3
+elif [[ "$ERRORS" -gt 0 ]]; then
     echo -e "${RED}RESULT: FAIL${NC} — $ERRORS blocking issue(s) must be resolved"
     exit 2
 elif [[ "$WARNINGS" -gt 0 ]]; then

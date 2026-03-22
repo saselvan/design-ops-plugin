@@ -1,6 +1,7 @@
-# PRP Template v3 (Domain-Aware)
+# PRP Template v3.1 (Domain-Aware)
 
-> Product Requirements Prompt — transforms intent into agent-executable blueprints.
+> Product Requirements Prompt — defines WHAT must be true when we're done.
+> Vertical slicing (the HOW) happens in `/prp-to-issues`, not here.
 > This template has CORE sections (always required) and DOMAIN EXTENSIONS (loaded per project).
 
 ---
@@ -9,8 +10,8 @@
 
 ```yaml
 prp_id: {{PRP_ID}}           # Format: PRP-YYYY-MM-DD-XXX
-domain: {{DOMAIN}}            # universal | consumer | healthcare | data | integration | construction | remote | security
-confidence_score: {{SCORE}}   # 1.0-10.0
+domain: {{DOMAIN}}            # From .designops config or --domain flag
+confidence_score: {{SCORE}}   # 1.0-10.0 (RED < 4 = HARD STOP)
 confidence_breakdown:
   requirement_clarity: {{RC}}  # 0.0-1.0 (weight: 30%)
   pattern_availability: {{PA}} # 0.0-1.0 (weight: 25%)
@@ -18,7 +19,8 @@ confidence_breakdown:
   edge_case_handling: {{EC}}   # 0.0-1.0 (weight: 15%)
   tech_familiarity: {{TF}}     # 0.0-1.0 (weight: 10%)
 risk_level: {{RISK}}          # Red (1-3) | Yellow (4-6) | Green (7-9)
-tier: {{TIER}}                # small | medium | large
+tier: {{TIER}}                # medium | large
+discovery_log: {{PATH}}       # Path to decisions log (LARGE tier only, optional)
 ```
 
 ---
@@ -69,64 +71,53 @@ FAILURE := ANY(
 )
 ```
 
-### Metrics (if applicable)
+### Metrics
 
-| Metric | Current | Target | How to measure |
-|--------|---------|--------|---------------|
-| {{M1}} | {{C1}} | {{T1}} | {{HOW_1}} |
+| Metric | Current | Target | How to measure | Provable by test? |
+|--------|---------|--------|---------------|-------------------|
+| {{M1}} | {{C1}} | {{T1}} | {{HOW_1}} | Yes / No (observe in prod) |
 
 <!-- INVARIANT #7: Every criterion must be measurable -->
+<!-- Mark which criteria are provable by tests vs. require production observation -->
+<!-- This feeds the completion summary in /design build -->
 
 ---
 
-## 3. Vertical Slices
+## 3. Scope & Dependencies
 
-Each slice is a thin end-to-end path through ALL layers (schema → API → UI → tests). A completed slice is demoable on its own.
+<!-- This section defines the COMPONENTS and their RELATIONSHIPS. -->
+<!-- It does NOT define vertical slices — that happens in /prp-to-issues. -->
 
-### Slice 1: {{SLICE_1_NAME}}
+### Components
 
-**Type:** AFK | HITL
-**Blocked by:** None — can start immediately
-**Success criteria covered:** {{SC_REFS}}
+| Component | Responsibility | New or Modified |
+|-----------|---------------|----------------|
+| {{COMP_1}} | {{RESP_1}} | {{NEW_MOD_1}} |
+| {{COMP_2}} | {{RESP_2}} | {{NEW_MOD_2}} |
+| {{COMP_3}} | {{RESP_3}} | {{NEW_MOD_3}} |
 
-**What to build:**
-{{SLICE_1_DESCRIPTION}}
+### Dependency Map
 
-**Acceptance criteria:**
-- [ ] {{AC_1_1}}
-- [ ] {{AC_1_2}}
-- [ ] {{AC_1_3}}
-
-**Validation gate:**
-```bash
-{{VALIDATION_COMMAND_1}}
+```
+{{COMP_1}} → {{COMP_2}} (produces: {{DATA_FLOW}})
+{{COMP_2}} → {{COMP_3}} (produces: {{DATA_FLOW}})
+{{COMP_3}} → external: {{EXTERNAL_DEP}} (fallback: {{FALLBACK}})
 ```
 
-**If gate fails:** {{FAILURE_ACTION_1}}
+### Component Contracts
 
----
+<!-- Define interfaces between components. Integration tests verify these. -->
 
-### Slice 2: {{SLICE_2_NAME}}
-
-**Type:** AFK | HITL
-**Blocked by:** Slice 1
-**Success criteria covered:** {{SC_REFS}}
-
-**What to build:**
-{{SLICE_2_DESCRIPTION}}
-
-**Acceptance criteria:**
-- [ ] {{AC_2_1}}
-- [ ] {{AC_2_2}}
-
-**Validation gate:**
-```bash
-{{VALIDATION_COMMAND_2}}
+```
+{{COMP_1}} OUTPUT CONTRACT:
+  {
+    {{field}}: {{type}},  // {{constraint}}
+  }
+  CONSUMERS: {{COMP_2}}, {{COMP_3}}
+  BREAKING CHANGES: {{what would break consumers}}
 ```
 
-**If gate fails:** {{FAILURE_ACTION_2}}
-
-<!-- Add more slices as needed. Prefer many thin slices over few thick ones. -->
+<!-- INVARIANT #9: Blast radius declared for each component -->
 
 ---
 
@@ -156,27 +147,20 @@ IF {{TRIGGER_2}}:
 
 Copy-pasteable commands to verify the implementation works.
 
-### Per-Slice Verification
-
-```bash
-# Slice 1: {{SLICE_1_NAME}}
-{{TEST_CMD_1}}
-
-# Slice 2: {{SLICE_2_NAME}}
-{{TEST_CMD_2}}
-```
-
 ### Integration Verification
 
 ```bash
-# After all slices — do they work TOGETHER?
+# Do the components work TOGETHER?
 {{INTEGRATION_TEST_CMD}}
 ```
 
 ### E2E Smoke Test
 
+<!-- Domain-specific. See .designops e2e config. -->
+
 ```bash
 # Full user workflow — does the system ACTUALLY WORK end-to-end?
+# Tool: {{E2E_TOOL}}  Time budget: {{TIME_BUDGET}}
 {{E2E_SMOKE_TEST_CMD}}
 ```
 
@@ -221,7 +205,7 @@ Copy-pasteable commands to verify the implementation works.
 
 # DOMAIN EXTENSIONS
 
-<!-- Include the relevant extension below. Delete the others. -->
+<!-- Include the relevant extension below based on .designops config. Delete the others. -->
 
 ## Extension: Healthcare / HLS
 
@@ -249,6 +233,14 @@ BREACH_PROTOCOL := {{BREACH_RESPONSE}}
 | Data Element | Classification | Retention | Access Control |
 |-------------|---------------|-----------|----------------|
 | {{DATA_1}} | {{CLASS_1}} | {{RETAIN_1}} | {{ACCESS_1}} |
+
+### E2E Definition (Healthcare)
+
+```bash
+# Pipeline run + verify PHI absent from output + audit log populated
+# Tool: pytest  Time budget: 120-600s
+{{HEALTHCARE_E2E_CMD}}
+```
 
 ---
 
@@ -278,6 +270,14 @@ MONITORING := {{DASHBOARD_OR_ALERTS}}
 REPLAY_CAPABILITY := {{YES_NO_HOW}}
 ```
 
+### E2E Definition (Data)
+
+```bash
+# Run pipeline with test data → verify output schema + row counts + quality
+# Tool: pytest / notebook  Time budget: 60-300s
+{{DATA_E2E_CMD}}
+```
+
 ---
 
 ## Extension: Consumer Product
@@ -286,11 +286,10 @@ REPLAY_CAPABILITY := {{YES_NO_HOW}}
 
 ### Accessibility
 
-<!-- INVARIANT #11: WCAG 2.1 AA baseline -->
 - Keyboard navigation for all interactions
 - Screen reader compatible (semantic HTML, ARIA)
-- Color contrast ≥ 4.5:1
-- Touch targets ≥ 44x44px
+- Color contrast >= 4.5:1
+- Touch targets >= 44x44px
 - No information conveyed by color alone
 
 ### Performance Budgets
@@ -300,6 +299,14 @@ REPLAY_CAPABILITY := {{YES_NO_HOW}}
 | LCP | {{LCP_TARGET}} |
 | FID | {{FID_TARGET}} |
 | Bundle size | {{BUNDLE_TARGET}} |
+
+### E2E Definition (Consumer)
+
+```bash
+# Playwright browser test through critical user path
+# Tool: playwright  Time budget: 30-120s
+{{CONSUMER_E2E_CMD}}
+```
 
 ---
 
@@ -326,6 +333,14 @@ CIRCUIT_BREAKER := open after {{THRESHOLD}} failures, half-open after {{COOLDOWN
 FALLBACK := {{FALLBACK_BEHAVIOR}}
 ```
 
+### E2E Definition (Integration)
+
+```bash
+# Request → response → verify contract + side effects
+# Tool: pytest / curl  Time budget: 15-60s
+{{INTEGRATION_E2E_CMD}}
+```
+
 ---
 
 ## Extension: Physical Construction
@@ -344,7 +359,15 @@ FALLBACK := {{FALLBACK_BEHAVIOR}}
 |------|------|-----|--------------|
 | {{GATE_1}} | {{WHEN_1}} | {{WHO_1}} | {{PASS_1}} |
 
+### E2E Definition (Construction)
+
+```
+# Manual inspection checklist — no automated e2e
+# Completed by: {{INSPECTOR}}
+# Frequency: at each inspection gate
+```
+
 ---
 
-*Template version: 3.0*
+*Template version: 3.1*
 *Last updated: 2026-03-22*
