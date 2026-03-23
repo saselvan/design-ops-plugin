@@ -1,9 +1,9 @@
 ---
 name: design
-description: "Design Ops v3.1. Journey → PRP → Issues → TDD. Tiered pipeline with invariant enforcement, devil's advocate, and e2e testing. USE WHEN design, PRP, validate, requirements, init project, review implementation."
+description: "Design Ops v3.2. Journey → PRP → Issues → TDD. Tiered pipeline with invariant enforcement, devil's advocate, e2e testing, and blackboard-powered parallel builds. USE WHEN design, PRP, validate, requirements, init project, review implementation."
 ---
 
-# Design Ops v3.1
+# Design Ops v3.2
 
 Transform intent into executable PRPs. Issues own the vertical slicing. TDD per issue.
 
@@ -57,14 +57,15 @@ Interactive exploration before PRP generation. LARGE tier only.
 2. Explore the codebase for relevant patterns and conventions
 3. Run `/grill-me` — devil's advocate walks the decision tree, challenges assumptions
 4. Resolve each branch interactively
-5. **Parallel interface exploration** (when a key module boundary is identified):
-   - Spawn 3+ parallel sub-agents, each with a different design constraint:
+5. **Parallel interface exploration via `/blackboard`** (when a key module boundary is identified):
+   - Invoke blackboard with 3-4 parallel streams, each exploring a different design constraint:
      - **(a) Minimize interface** — fewest possible params/props/methods
      - **(b) Maximize flexibility** — generic, composable, extensible
      - **(c) Optimize for common caller** — ergonomic for the 80% use case
      - **(d) Ports & adapters** — abstract external dependencies behind owned interfaces
-   - Each agent outputs: interface signature, usage example, hidden complexity, trade-offs
-   - Present designs to user, compare in prose, pick one
+   - Each agent (agent_type: "Plan") outputs: interface signature, usage example, hidden complexity, trade-offs
+   - Board signals persist each alternative to disk (survives context compaction)
+   - Read blackboard synthesis, present designs to user, compare in prose, pick one
 6. **Write a decisions log file** (not just conversation — survives context compression)
 
 **Output:** Decisions log file at `docs/design/discoveries/{feature-name}.md`:
@@ -122,6 +123,7 @@ Generate a PRP from a journey, problem statement, or discovery decisions log.
    - Where could integration break?
    - What's over-engineered?
    - What would a user actually do differently?
+   - **LARGE tier optimization:** Validator and red-team run in parallel via `/blackboard` (both are independent, both read the same PRP). Saves ~50% of review time on complex PRPs.
 7. **Auto-validate** — run `validate-prp.sh` on the generated file
 
 **Output:** PRP markdown file with confidence score and validation results.
@@ -160,6 +162,40 @@ True TDD per issue. Replaces the old `/design implement` + `/design run` split.
 7. Commit
 8. Next issue
 ```
+
+**Parallel issue build via `/blackboard`** (when 2+ issues have no mutual dependencies):
+
+```
+/design build reads issue dependency graph from /prp-to-issues
+  │
+  ├── Sequential issues (has deps on incomplete work) → normal TDD loop above
+  │
+  └── Parallel-eligible group detected (2+ issues, no mutual deps) →
+        invoke /blackboard with per-issue TDD streams
+        each agent:
+          - works in its own worktree (Claude Code native isolation: worktree)
+          - runs full TDD cycle (red-green-refactor) for its issue
+          - commits to worktree branch
+          - writes board signal with branch_name, commit_sha, test results
+        blackboard synthesis:
+          - merges worktree branches into feature branch
+          - runs integration tests on merged result
+          - reports merge status + test results
+        design-ops reads synthesis, resolves any conflicts, continues
+```
+
+**Parallel build config** in `.designops`:
+```yaml
+parallel:
+  enabled: true               # allow blackboard during /design build
+  max_parallel_issues: 3      # cap concurrent agents
+```
+
+**When NOT to parallelize issues:**
+- Issues modify the same files (high merge conflict risk)
+- Issues share mutable state (database schema, shared config)
+- `.designops` has `parallel.enabled: false`
+- Only 1 issue is ready (nothing to parallelize)
 
 **Hard rule: NEVER refactor while RED.** If tests are failing, your only job is to make them pass. Refactoring (extracting duplication, renaming, restructuring) happens ONLY after GREEN. Mixing refactoring with fixing breaks the feedback loop — you can't tell if a new failure is from your fix or your refactor.
 
@@ -284,6 +320,9 @@ e2e:
   tool: pytest           # playwright | pytest | notebook | manual
   time_budget: 300s      # max time for e2e smoke test
   run_frequency: every_slice  # every_slice | every_2_slices | at_gates
+parallel:
+  enabled: true          # allow blackboard during /design build
+  max_parallel_issues: 3 # cap concurrent agents (worktree isolation)
 ```
 
 **Domain auto-loading:** `/design prp` reads this file automatically. The `--domain` flag overrides it.
@@ -385,11 +424,25 @@ Domain extensions appended when relevant. Template: `~/.claude/design-ops/templa
 
 ---
 
+## Blackboard Integration Summary
+
+Design-ops is the **workflow brain**. Blackboard is the **dumb parallelizer**. Design-ops owns tiers, PRPs, invariants, TDD cycles, and quality gates. Blackboard knows nothing about any of these — it receives streams with prompts and returns synthesis.
+
+| Integration Point | Where | Trigger | Value |
+|-------------------|-------|---------|-------|
+| Parallel interface exploration | `/design discover` | Key module boundary identified | Design alternatives survive context compaction |
+| Parallel validator + red-team | `/design prp` (LARGE) | Always for LARGE tier | ~50% faster PRP review |
+| Parallel issue build | `/design build` | 2+ independent issues in dependency graph | Significant time savings on LARGE builds |
+
+All parallel work uses Claude Code native worktree isolation (`isolation: worktree`). Each agent works in `.claude/worktrees/{agent-name}/`, commits independently, and blackboard merges branches after completion. See `/blackboard` skill for full protocol.
+
+---
+
 ## Key Files
 
 ```
 design-ops/
-├── SKILL.md                    # This file (v3.1 command reference)
+├── SKILL.md                    # This file (v3.2 command reference)
 ├── design.md                   # Skill loaded into context
 ├── system-invariants.md        # Universal invariants 1-10
 ├── validate-prp.sh             # Auto-validator (runs after /design prp)
@@ -403,6 +456,7 @@ design-ops/
 
 ---
 
-**Version**: 3.1
-**Predecessor**: v3.0 (refined by grill-me session)
-**Last updated**: 2026-03-22
+**Version**: 3.2
+**Predecessor**: v3.1
+**Changes in 3.2**: Blackboard integration for parallel interface exploration, parallel PRP validation (LARGE tier), and parallel issue builds with worktree isolation. Added `parallel` config to `.designops`.
+**Last updated**: 2026-03-23

@@ -1,10 +1,10 @@
 ---
 name: design
-description: "Design Ops v3.1. Journey → PRP → Issues → TDD. Tiered pipeline with invariant enforcement, devil's advocate, and e2e testing. USE WHEN design, PRP, validate, requirements, init project, review implementation."
-version: "3.1"
+description: "Design Ops v3.2. Journey → PRP → Issues → TDD. Tiered pipeline with invariant enforcement, devil's advocate, e2e testing, and blackboard-powered parallel builds. USE WHEN design, PRP, validate, requirements, init project, review implementation."
+version: "3.2"
 ---
 
-# Design Ops v3.1
+# Design Ops v3.2
 
 Journey → PRP → Issues → TDD. Three tiers. PRP defines WHAT. Issues define HOW.
 
@@ -109,6 +109,9 @@ e2e:
   tool: pytest
   time_budget: 300s
   run_frequency: every_slice
+parallel:
+  enabled: true
+  max_parallel_issues: 3
 ```
 
 Healthcare and security domains enforce ALL invariants as BLOCKING.
@@ -188,5 +191,19 @@ Writes a decisions log to `docs/design/discoveries/{feature}.md`. Not conversati
 
 ---
 
-**Version**: 3.1
-**Last updated**: 2026-03-22
+## Blackboard Integration
+
+Design-ops is the **workflow brain**. `/blackboard` is the **dumb parallelizer**.
+
+| Where | Trigger | What happens |
+|-------|---------|-------------|
+| `/design discover` | Key module boundary | Parallel interface exploration (4 design constraints) |
+| `/design prp` (LARGE) | Always | Validator + red-team run in parallel |
+| `/design build` | 2+ independent issues | Parallel TDD with worktree isolation, merge + integration test |
+
+All parallel work uses Claude Code native `isolation: worktree`. See `/blackboard` skill v2.0 for full protocol.
+
+---
+
+**Version**: 3.2
+**Last updated**: 2026-03-23
